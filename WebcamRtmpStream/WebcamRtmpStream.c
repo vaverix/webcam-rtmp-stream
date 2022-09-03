@@ -1,5 +1,4 @@
-﻿// WebcamRtmpStream.cpp : Ten plik zawiera funkcję „main”. W nim rozpoczyna się i kończy wykonywanie programu.
-//
+﻿// WebcamRtmpStream.cpp
 
 #define _CRT_SECURE_NO_WARNINGS
 #include "WebcamRtmpStream.h"
