@@ -30,7 +30,7 @@ After you installed everything for your host OS, run:
 make
 ```
 
-#### Prerequisites (Windows, not working?) [https://vcpkg.io/en/getting-started.html](vcpkg)
+#### Prerequisites (Windows, not tested) [https://vcpkg.io/en/getting-started.html](vcpkg)
 
 ```sh
 vcpkg install ffmpeg ffmpeg:x64-windows
@@ -41,13 +41,13 @@ vcpkg install ffmpeg ffmpeg:x64-windows
 #### Parameters
 
 ```sh
-./build/WebcamRtmpStream [video_device] [audio_device] [output_path] [output_format] [width] [height] [fps]
+./build/stream [video_device] [audio_device] [output_path] [output_format] [width] [height] [fps]
 ```
 
 #### Linux example
 
 ```sh
-./build/WebcamRtmpStream /dev/video0 default rtmp://localhost/live/stream flv 800 600 24
+./build/stream /dev/video0 default rtmp://localhost/live/stream flv 800 600 24
 ```
 
 ### License
