@@ -7,13 +7,11 @@ Sound device support added.
 
 ### Build (dynamic)
 
-Build artifacts will be stored inside `build/` directory.
-
 #### Prerequisites (Ubuntu)
 
 ```sh
 sudo apt-get update
-sudo apt-get install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavresample-dev libavdevice-dev -y
+sudo apt-get install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev -y
 sudo apt-get install ffmpeg -y
 sudo apt-get install build-essential clang -y
 ```
@@ -24,17 +22,21 @@ sudo apt-get install build-essential clang -y
 brew install ffmpeg
 ```
 
+#### Prerequisites (Windows, not tested) [https://vcpkg.io/en/getting-started.html](vcpkg)
+
+```sh
+vcpkg install ffmpeg ffmpeg:x64-windows
+```
+
+### Installation
+
 After you installed everything for your host OS, run:
 
 ```sh
 make
 ```
 
-#### Prerequisites (Windows, not tested) [https://vcpkg.io/en/getting-started.html](vcpkg)
-
-```sh
-vcpkg install ffmpeg ffmpeg:x64-windows
-```
+Build artifacts will be stored inside `build/` directory.
 
 ### Usage
 
