@@ -288,7 +288,8 @@ int init_adevice_and_input_context(stream_ctx_t* stream_ctx, const char* adevice
     stream_ctx->in_codec_ctx_a = avcodec_alloc_context3(stream_ctx->in_codec_a);
 
     AVDictionary* codec_options = NULL;
-    av_dict_set(&codec_options, "channels", 2, 0);
+    const char* channels = "2";
+    av_dict_set(&codec_options, "channels", channels, 0);
     //avcodec_parameters_to_context(stream_ctx->in_codec_ctx_a, stream_ctx->ifmt_ctx_a->streams[0]->codecpar);
     if (avcodec_open2(stream_ctx->in_codec_ctx_a, stream_ctx->in_codec_a, &codec_options) != 0)
     {
