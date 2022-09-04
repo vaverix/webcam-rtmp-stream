@@ -34,7 +34,7 @@ void set_acodec_params(stream_ctx_t* stream_ctx);
 int init_codec_stream(stream_ctx_t* stream_ctx);
 int init_acodec_stream(stream_ctx_t* stream_ctx);
 struct SwsContext* initialize_video_sample_scaler(stream_ctx_t* stream_ctx);
-struct SwsContext* initialize_audio_resampler(stream_ctx_t* stream_ctx);
+//struct SwsContext* initialize_audio_resampler(stream_ctx_t* stream_ctx);
 char* concat_str(const char* s1, const char* s2);
 const char* get_device_family();
 void handle_signal(int signal);

@@ -412,7 +412,7 @@ struct SwsContext* initialize_video_sample_scaler(stream_ctx_t* stream_ctx)
 
     return swsctx;
 }
-
+/*
 struct SwsContext* initialize_audio_resampler(stream_ctx_t* stream_ctx)
 {
     struct SwsContext* swsctx_a = swr_alloc_set_opts(NULL,
@@ -428,7 +428,7 @@ struct SwsContext* initialize_audio_resampler(stream_ctx_t* stream_ctx)
     }
     return swsctx_a;
 }
-
+*/
 char* concat_str(const char* s1, const char* s2)
 {
     const size_t len1 = strlen(s1);
