@@ -26,7 +26,7 @@ bool end_stream;
 
 void stream_video(const char* device_index, const char* adevice_index, const char* output_path, const char* output_format, int width, int height, int fps);
 int init_device_and_input_context(stream_ctx_t* stream_ctx, const char* device_family, const char* device_index, int width, int height, int fps);
-int init_adevice_and_input_context(stream_ctx_t* stream_ctx, const char* adevice_index);
+int init_adevice_and_input_context(stream_ctx_t* stream_ctx, const char* adevice_family, const char* adevice_index);
 int init_output_avformat_context(stream_ctx_t* stream_ctx, const char* format_name);
 int init_io_context(stream_ctx_t* stream_ctx, const char* output_path);
 void set_codec_params(stream_ctx_t* stream_ctx, int width, int height, int fps);
@@ -37,4 +37,5 @@ struct SwsContext* initialize_video_sample_scaler(stream_ctx_t* stream_ctx);
 //struct SwsContext* initialize_audio_resampler(stream_ctx_t* stream_ctx);
 char* concat_str(const char* s1, const char* s2);
 const char* get_device_family();
+const char* get_adevice_family();
 void handle_signal(int signal);

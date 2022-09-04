@@ -36,6 +36,7 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
     avformat_network_init();
 
     const char* device_family = get_device_family();
+    const char* adevice_family = get_adevice_family();
 
     stream_ctx_t* stream_ctx = malloc(sizeof(stream_ctx_t));
     stream_ctx->output_path = malloc(strlen(output_path) + 1);
@@ -62,7 +63,7 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
         return;
     }
 
-    if (init_adevice_and_input_context(stream_ctx, adevice_index) != 0)
+    if (init_adevice_and_input_context(stream_ctx, adevice_family, adevice_index) != 0)
     {
         return;
     }
@@ -269,11 +270,12 @@ int init_device_and_input_context(stream_ctx_t* stream_ctx, const char* device_f
     return 0;
 }
 
-int init_adevice_and_input_context(stream_ctx_t* stream_ctx, const char* adevice_index)
+int init_adevice_and_input_context(stream_ctx_t* stream_ctx, const char* adevice_family, const char* adevice_index)
 {
+    stream_ctx->ifmt_a = av_find_input_format(adevice_family);
     AVDictionary* options = NULL;
 
-    if (avformat_open_input(&stream_ctx->ifmt_ctx_a, adevice_index, stream_ctx->ifmt, &options) != 0)
+    if (avformat_open_input(&stream_ctx->ifmt_ctx_a, adevice_index, stream_ctx->ifmt_a, &options) != 0)
     {
         fprintf(stderr, "cannot initialize audio input device!\n");
         return 1;
@@ -449,6 +451,19 @@ const char* get_device_family()
 #endif
 
     return device_family;
+}
+
+const char* get_adevice_family()
+{
+#ifdef _WIN32
+    const char* adevice_family = "dshow";
+#elif __APPLE__
+    const char* adevice_family = "avfoundation";
+#elif __linux__
+    const char* adevice_family = "alsa";
+#endif
+
+    return adevice_family;
 }
 
 void handle_signal(int signal)
