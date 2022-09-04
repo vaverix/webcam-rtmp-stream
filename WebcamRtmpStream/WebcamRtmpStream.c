@@ -107,7 +107,7 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
     outframe->format = stream_ctx->out_codec_ctx->pix_fmt;
 
     struct SwsContext* swsctx = initialize_video_sample_scaler(stream_ctx);
-    struct SwsContext* swsctx_a = initialize_audio_resampler(stream_ctx);
+    //struct SwsContext* swsctx_a = initialize_audio_resampler(stream_ctx);
     av_new_packet(pkt, 0);
     av_new_packet(pkt_a, 0);
 
