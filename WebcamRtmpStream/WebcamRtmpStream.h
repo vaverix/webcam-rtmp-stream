@@ -15,7 +15,7 @@ typedef struct stream_ctx_t
 {
 	char* output_path;
 	char* output_format;
-	AVInputFormat* ifmt;
+	AVInputFormat* ifmt, * ifmt_a;
 	AVFormatContext* ifmt_ctx, * ifmt_ctx_a, * ofmt_ctx;
 	AVCodec* in_codec, * in_codec_a, * out_codec, * out_codec_a;
 	AVStream* in_stream, * in_stream_a, * out_stream, * out_stream_a;

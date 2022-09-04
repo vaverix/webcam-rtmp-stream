@@ -41,11 +41,16 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
     stream_ctx->output_path = malloc(strlen(output_path) + 1);
     stream_ctx->output_format = malloc(strlen(output_format) + 1);
     stream_ctx->ifmt = NULL;
+    stream_ctx->ifmt_a = NULL;
     stream_ctx->ifmt_ctx = NULL;
+    stream_ctx->ifmt_ctx_a = NULL;
     stream_ctx->ofmt_ctx = NULL;
     stream_ctx->out_codec = NULL;
+    stream_ctx->out_codec_a = NULL;
     stream_ctx->out_stream = NULL;
+    stream_ctx->out_stream_a = NULL;
     stream_ctx->out_codec_ctx = NULL;
+    stream_ctx->out_codec_ctx_a = NULL;
 
     memcpy(stream_ctx->output_path, output_path, strlen(output_path));
     stream_ctx->output_path[strlen(output_path)] = '\0';
