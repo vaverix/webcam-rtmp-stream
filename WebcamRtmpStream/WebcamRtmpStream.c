@@ -22,12 +22,54 @@ int main(int argc, char* argv[])
     end_stream = false;
     signal(SIGINT, handle_signal);
 
-    stream_video(device, adevice, output_path, output_format, width, height, fps);
+    if (init(device, adevice, output_path, output_format, width, height, fps))
+    {
+        fprintf(stderr, "Error initializing, exiting now...\n");
+        //clean_up(stream_ctx);
+        return 1;
+    }
 
     return 0;
 }
 
-void stream_video(const char* device_index, const char* adevice_index, const char* output_path, const char* output_format, int width, int height, int fps)
+void handle_signal(int signal)
+{
+    fprintf(stderr, "Caught SIGINT, exiting now...\n");
+    end_stream = true;
+    //clean_up(stream_ctx);
+}
+
+void clean_up(stream_ctx_t* stream_ctx)
+{
+    av_write_trailer(stream_ctx->ofmt_ctx);
+    avio_close(stream_ctx->ofmt_ctx->pb);
+    avformat_free_context(stream_ctx->ofmt_ctx);
+    avio_close(stream_ctx->ifmt_ctx->pb);
+    avio_close(stream_ctx->ifmt_ctx_a->pb);
+    avformat_free_context(stream_ctx->ifmt_ctx);
+    avformat_free_context(stream_ctx->ifmt_ctx_a);
+    free(stream_ctx->output_path);
+    free(stream_ctx->output_format);
+    free(stream_ctx->device_index);
+    free(stream_ctx->adevice_index);
+    free(stream_ctx->ifmt);
+    free(stream_ctx->ifmt_a);
+    free(stream_ctx->ifmt_ctx);
+    free(stream_ctx->ifmt_ctx_a);
+    free(stream_ctx->ofmt_ctx);
+    free(stream_ctx->out_codec);
+    free(stream_ctx->out_codec_a);
+    free(stream_ctx->out_stream);
+    free(stream_ctx->out_stream_a);
+    free(stream_ctx->out_codec_ctx);
+    free(stream_ctx->out_codec_ctx_a);
+    free(stream_ctx->filter_graph);
+    free(stream_ctx->buffer_sink_ctx);
+    free(stream_ctx->buffer_src_ctx);
+    free(stream_ctx);
+}
+
+int init(const char* device_index, const char* adevice_index, const char* output_path, const char* output_format, int width, int height, int fps)
 {
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 9, 100)
     av_register_all();
@@ -41,6 +83,11 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
     stream_ctx_t* stream_ctx = malloc(sizeof(stream_ctx_t));
     stream_ctx->output_path = malloc(strlen(output_path) + 1);
     stream_ctx->output_format = malloc(strlen(output_format) + 1);
+    stream_ctx->device_index = malloc(strlen(device_index) + 1);
+    stream_ctx->adevice_index = malloc(strlen(adevice_index) + 1);
+    stream_ctx->width = width;
+    stream_ctx->height = height;
+    stream_ctx->fps = fps;
     stream_ctx->ifmt = NULL;
     stream_ctx->ifmt_a = NULL;
     stream_ctx->ifmt_ctx = NULL;
@@ -52,383 +99,582 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
     stream_ctx->out_stream_a = NULL;
     stream_ctx->out_codec_ctx = NULL;
     stream_ctx->out_codec_ctx_a = NULL;
+    stream_ctx->filter_graph = NULL;
+    stream_ctx->buffer_sink_ctx = NULL;
+    stream_ctx->buffer_src_ctx = NULL;
 
     memcpy(stream_ctx->output_path, output_path, strlen(output_path));
     stream_ctx->output_path[strlen(output_path)] = '\0';
     memcpy(stream_ctx->output_format, output_format, strlen(output_format));
     stream_ctx->output_format[strlen(output_format)] = '\0';
+    memcpy(stream_ctx->device_index, device_index, strlen(device_index));
+    stream_ctx->device_index[strlen(device_index)] = '\0';
+    memcpy(stream_ctx->adevice_index, adevice_index, strlen(adevice_index));
+    stream_ctx->adevice_index[strlen(adevice_index)] = '\0';
 
-    if (init_device_and_input_context(stream_ctx, device_family, device_index, width, height, fps) != 0)
-    {
-        return;
-    }
-
-    if (init_adevice_and_input_context(stream_ctx, adevice_family, adevice_index) != 0)
-    {
-        return;
-    }
-
-    init_output_avformat_context(stream_ctx, output_format);
-    init_io_context(stream_ctx, output_path);
-
-    stream_ctx->out_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-    stream_ctx->out_stream = avformat_new_stream(stream_ctx->ofmt_ctx, stream_ctx->out_codec);
-    stream_ctx->out_codec_ctx = avcodec_alloc_context3(stream_ctx->out_codec);
-
-    stream_ctx->out_codec_a = avcodec_find_encoder(AV_CODEC_ID_AAC);
-    stream_ctx->out_stream_a = avformat_new_stream(stream_ctx->ofmt_ctx, stream_ctx->out_codec_a);
-    stream_ctx->out_codec_ctx_a = avcodec_alloc_context3(stream_ctx->out_codec_a);
-
-    set_codec_params(stream_ctx, width, height, fps);
-    set_acodec_params(stream_ctx);
-    init_codec_stream(stream_ctx);
-    init_acodec_stream(stream_ctx);
-
-    stream_ctx->out_stream->codecpar->extradata = stream_ctx->out_codec_ctx->extradata;
-    stream_ctx->out_stream->codecpar->extradata_size = stream_ctx->out_codec_ctx->extradata_size;
-
-    stream_ctx->out_stream_a->codecpar->extradata = stream_ctx->out_codec_ctx_a->extradata;
-    stream_ctx->out_stream_a->codecpar->extradata_size = stream_ctx->out_codec_ctx_a->extradata_size;
-
-    av_dump_format(stream_ctx->ofmt_ctx, 0, output_path, 1);
-
-    if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
-    {
-        fprintf(stderr, "could not write header to ouput context!\n");
-        return;
-    }
-
-    AVFrame* frame = av_frame_alloc();
-    AVFrame* frame_a = av_frame_alloc();
-    AVFrame* outframe = av_frame_alloc();
-    AVFrame* outframe_a = av_frame_alloc();
-    AVPacket* pkt = av_packet_alloc();
-    AVPacket* pkt_a = av_packet_alloc();
-
-    int nbytes = av_image_get_buffer_size(stream_ctx->out_codec_ctx->pix_fmt, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, 32);
-    uint8_t* video_outbuf = (uint8_t*)av_malloc(nbytes);
-    av_image_fill_arrays(outframe->data, outframe->linesize, video_outbuf, AV_PIX_FMT_YUV420P, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, 1);
-    outframe->width = width;
-    outframe->height = height;
-    outframe->format = stream_ctx->out_codec_ctx->pix_fmt;
-
-    struct SwsContext* swsctx = initialize_video_sample_scaler(stream_ctx);
-    //struct SwsContext* swsctx_a = initialize_audio_resampler(stream_ctx);
-    av_new_packet(pkt, 0);
-    av_new_packet(pkt_a, 0);
-
-    long pts = 0;
-    long pts_a = 0;
-
-    while (!end_stream)
-    {
-        if (av_read_frame(stream_ctx->ifmt_ctx, pkt) >= 0) {
-            frame = av_frame_alloc();
-            if (avcodec_send_packet(stream_ctx->in_codec_ctx, pkt) != 0)
-            {
-                fprintf(stderr, "error sending packet to input video codec context!\n");
-                break;
-            }
-
-            if (avcodec_receive_frame(stream_ctx->in_codec_ctx, frame) != 0)
-            {
-                fprintf(stderr, "error receiving frame from input video codec context!\n");
-                break;
-            }
-
-            av_packet_unref(pkt);
-            av_new_packet(pkt, 0);
-
-            sws_scale(swsctx, (const uint8_t* const*)frame->data, frame->linesize, 0, stream_ctx->in_codec_ctx->height, outframe->data, outframe->linesize);
-            av_frame_free(&frame);
-            outframe->pts = pts++;
-
-            if (avcodec_send_frame(stream_ctx->out_codec_ctx, outframe) != 0)
-            {
-                fprintf(stderr, "error sending frame to output video codec context!\n");
-                break;
-            }
-
-            if (avcodec_receive_packet(stream_ctx->out_codec_ctx, pkt) != 0)
-            {
-                fprintf(stderr, "error receiving packet from output video codec context!\n");
-                break;
-            }
-
-            pkt->pts = av_rescale_q(pkt->pts, stream_ctx->out_codec_ctx->time_base, stream_ctx->out_stream->time_base);
-            pkt->dts = av_rescale_q(pkt->dts, stream_ctx->out_codec_ctx->time_base, stream_ctx->out_stream->time_base);
-
-            av_interleaved_write_frame(stream_ctx->ofmt_ctx, pkt);
-            av_packet_unref(pkt);
-            av_new_packet(pkt, 0);
-            av_frame_free(&outframe);
-        }
-        /*
-        if (av_read_frame(stream_ctx->ifmt_ctx_a, pkt_a) >= 0) {
-            frame_a = av_frame_alloc();
-            if (avcodec_send_packet(stream_ctx->in_codec_ctx_a, pkt_a) != 0)
-            {
-                fprintf(stderr, "error sending packet to input audio codec context!\n");
-                break;
-            }
-
-            if (avcodec_receive_frame(stream_ctx->in_codec_ctx_a, frame_a) != 0)
-            {
-                fprintf(stderr, "error receiving frame from input audio codec context!\n");
-                break;
-            }
-
-            av_packet_unref(pkt_a);
-            av_new_packet(pkt_a, 0);
-
-            // TODO: RESAMPLE AUDIO HERE
-            outframe_a = frame_a;
-            av_frame_free(&frame_a);
-            outframe_a->pts = pts_a++;
-
-            if (avcodec_send_frame(stream_ctx->out_codec_ctx_a, outframe_a) != 0)
-            {
-                fprintf(stderr, "error sending frame to output audio codec context!\n");
-                break;
-            }
-
-            if (avcodec_receive_packet(stream_ctx->out_codec_ctx_a, pkt_a) != 0)
-            {
-                fprintf(stderr, "error receiving packet from output audio codec context!\n");
-                break;
-            }
-
-            pkt_a->pts = av_rescale_q(pkt_a->pts, stream_ctx->out_codec_ctx_a->time_base, stream_ctx->out_stream_a->time_base);
-            pkt_a->dts = av_rescale_q(pkt_a->dts, stream_ctx->out_codec_ctx_a->time_base, stream_ctx->out_stream_a->time_base);
-
-            av_interleaved_write_frame(stream_ctx->ofmt_ctx, pkt_a);
-            av_packet_unref(pkt_a);
-            av_new_packet(pkt_a, 0);
-            av_frame_free(&outframe_a);
-        }
-        */
-    }
-
-    av_write_trailer(stream_ctx->ofmt_ctx);
-    av_frame_free(&outframe);
-    av_frame_free(&outframe_a);
-    avio_close(stream_ctx->ofmt_ctx->pb);
-    avformat_free_context(stream_ctx->ofmt_ctx);
-    avio_close(stream_ctx->ifmt_ctx->pb);
-    avio_close(stream_ctx->ifmt_ctx_a->pb);
-    avformat_free_context(stream_ctx->ifmt_ctx);
-    avformat_free_context(stream_ctx->ifmt_ctx_a);
-
-    fprintf(stderr, "done.\n");
+    if (init_video(stream_ctx)) return 1;
+    if (init_audio(stream_ctx)) return 1;
+    return 0;
 }
 
-int init_device_and_input_context(stream_ctx_t* stream_ctx, const char* device_family, const char* device_index, int width, int height, int fps)
+int init_video(stream_ctx_t* stream_ctx)
 {
+    const char* device_family = get_device_family();
     char fps_str[5], width_str[5], height_str[5];
-    sprintf(fps_str, "%d", fps);
-    sprintf(width_str, "%d", width);
-    sprintf(height_str, "%d", height);
+    sprintf(fps_str, "%d", stream_ctx->fps);
+    sprintf(width_str, "%d", stream_ctx->width);
+    sprintf(height_str, "%d", stream_ctx->height);
 
     char* tmp = concat_str(width_str, "x");
     char* size = concat_str(tmp, height_str);
     free(tmp);
 
-    stream_ctx->ifmt = av_find_input_format(device_family);
+    AVDictionary* ioptions = NULL;
+    av_dict_set(&ioptions, "video_size", size, 0);
+    av_dict_set(&ioptions, "framerate", fps_str, 0);
+    av_dict_set(&ioptions, "pixel_format", av_get_pix_fmt_name(AV_PIX_FMT_YUYV422), 0);
+    av_dict_set(&ioptions, "probesize", "7000000", 0);
 
-    AVDictionary* options = NULL;
-    av_dict_set(&options, "video_size", size, 0);
-    av_dict_set(&options, "framerate", fps_str, 0);
-    av_dict_set(&options, "pixel_format", "uyvy422", 0);
-    av_dict_set(&options, "probesize", "7000000", 0);
-
-    free(size);
-
-    if (avformat_open_input(&stream_ctx->ifmt_ctx, device_index, stream_ctx->ifmt, &options) != 0)
+    stream_ctx->ifmt = av_find_input_format(stream_ctx->device_index);
+    if (avformat_open_input(&stream_ctx->ifmt_ctx, stream_ctx->device_index, stream_ctx->ifmt, &ioptions) != 0)
     {
         fprintf(stderr, "cannot initialize video input device!\n");
         return 1;
     }
+    av_dict_free(&ioptions);
 
-    avformat_find_stream_info(stream_ctx->ifmt_ctx, 0);
-    // av_dump_format(stream_ctx->ifmt_ctx, 0, device_family, 0);
-
-    stream_ctx->in_codec = avcodec_find_decoder(stream_ctx->ifmt_ctx->streams[0]->codecpar->codec_id);
-    stream_ctx->in_stream = avformat_new_stream(stream_ctx->ifmt_ctx, stream_ctx->in_codec);
-    stream_ctx->in_codec_ctx = avcodec_alloc_context3(stream_ctx->in_codec);
-
-    AVDictionary* codec_options = NULL;
-    av_dict_set(&codec_options, "framerate", fps_str, 0);
-    av_dict_set(&codec_options, "preset", "superfast", 0);
-
-    avcodec_parameters_to_context(stream_ctx->in_codec_ctx, stream_ctx->ifmt_ctx->streams[0]->codecpar);
-    if (avcodec_open2(stream_ctx->in_codec_ctx, stream_ctx->in_codec, &codec_options) != 0)
+    if (avformat_find_stream_info(stream_ctx->ifmt_ctx, 0) != 0)
     {
-        fprintf(stderr, "cannot initialize video decoder!\n");
+        fprintf(stderr, "cannot find video input info!\n");
         return 1;
     }
 
+    int stream_index = -1;
+	stream_index = av_find_best_stream(stream_ctx->ifmt_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
+    if (stream_index == -1)
+    {
+        fprintf(stderr, "cannot find video stream input!\n");
+        return 1;
+    }
+    stream_ctx->stream_index = stream_index;
+
+    stream_ctx->out_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    if (!stream_ctx->out_codec)
+    {
+        fprintf(stderr, "cannot find video encoder!\n");
+        return 1;
+    }
+
+    stream_ctx->out_codec_ctx = avcodec_alloc_context3(stream_ctx->out_codec);
+    if (!stream_ctx->out_codec_ctx)
+    {
+        fprintf(stderr, "cannot allocate video encoder context!\n");
+        return 1;
+    }
+	stream_ctx->out_codec_ctx->codec_id = stream_ctx->out_codec->id;
+	stream_ctx->out_codec_ctx->bit_rate = 400000;
+	stream_ctx->out_codec_ctx->width = stream_ctx->ifmt_ctx->streams[stream_index]->codecpar->width;
+	stream_ctx->out_codec_ctx->height = stream_ctx->ifmt_ctx->streams[stream_index]->codecpar->height;
+	stream_ctx->out_codec_ctx->time_base.num = 1;
+	stream_ctx->out_codec_ctx->time_base.den = 30;
+	stream_ctx->out_codec_ctx->framerate.num = 30;
+	stream_ctx->out_codec_ctx->framerate.den = 1;
+	stream_ctx->out_codec_ctx->gop_size = 10;
+	stream_ctx->out_codec_ctx->max_b_frames = 0;
+	stream_ctx->out_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+	stream_ctx->out_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    AVDictionary* eoptions = NULL;
+    av_dict_set(&eoptions, "preset", "superfast", 0);
+    av_dict_set(&eoptions, "tune", "zerolatency", 0);
+#ifndef _WIN32
+    av_dict_set(&eoptions, "profile", "high", 0);
+#endif // !_WIN32
+
+    //avcodec_parameters_to_context(stream_ctx->out_codec_ctx, stream_ctx->ifmt_ctx->streams[stream_index]->codecpar);
+    if (avcodec_open2(stream_ctx->out_codec_ctx, stream_ctx->out_codec, &eoptions) != 0)
+    {
+        fprintf(stderr, "cannot initialize video encoder!\n");
+        return 1;
+    }
+    av_dict_free(&eoptions);
+
+    if (avformat_alloc_output_context2(&stream_ctx->ofmt_ctx, NULL, stream_ctx->output_format, NULL) != 0)
+    {
+        fprintf(stderr, "cannot initialize video output format context!\n");
+        return 1;
+    }
+
+    stream_ctx->out_stream = avformat_new_stream(stream_ctx->ofmt_ctx, stream_ctx->out_codec);
+    if (!stream_ctx->out_stream)
+    {
+        fprintf(stderr, "cannot initialize video output stream!\n");
+        return 1;
+    }
+
+    if (avcodec_parameters_from_context(stream_ctx->out_stream->codecpar, stream_ctx->out_codec_ctx) != 0)
+    {
+        fprintf(stderr, "cannot get output video parameters!\n");
+        return 1;
+    }
+
+    //av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
+    if (avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL) != 0)
+    {
+        fprintf(stderr, "could not open RTMP context!\n");
+        return 1;
+    }
+
+    if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
+    {
+        fprintf(stderr, "could not write header to audio/video ouput context!\n");
+        avio_close(stream_ctx->ofmt_ctx);
+        return 1;
+    }
     return 0;
 }
 
-int init_adevice_and_input_context(stream_ctx_t* stream_ctx, const char* adevice_family, const char* adevice_index)
+int init_audio(stream_ctx_t* stream_ctx)
 {
-    stream_ctx->ifmt_a = av_find_input_format(adevice_family);
-    AVDictionary* options = NULL;
+    const char* device_family = get_adevice_family();
 
-    if (avformat_open_input(&stream_ctx->ifmt_ctx_a, adevice_index, stream_ctx->ifmt_a, &options) != 0)
+    AVDictionary* ioptions = NULL;
+    av_dict_set_int(&ioptions, "audio_buffer_size", 20, 0);
+
+    stream_ctx->ifmt_a = av_find_input_format(stream_ctx->adevice_index);
+    if (avformat_open_input(&stream_ctx->ifmt_ctx_a, stream_ctx->adevice_index, stream_ctx->ifmt_a, &ioptions) != 0)
     {
         fprintf(stderr, "cannot initialize audio input device!\n");
         return 1;
     }
+    av_dict_free(&ioptions);
 
-    avformat_find_stream_info(stream_ctx->ifmt_ctx_a, 0);
+    if (avformat_find_stream_info(stream_ctx->ifmt_ctx_a, 0) != 0)
+    {
+        fprintf(stderr, "cannot find audio input info!\n");
+        return 1;
+    }
 
-    stream_ctx->in_codec_a = avcodec_find_decoder(stream_ctx->ifmt_ctx_a->streams[0]->codecpar->codec_id);
-    stream_ctx->in_stream_a = avformat_new_stream(stream_ctx->ifmt_ctx_a, stream_ctx->in_codec_a);
+    int audio_stream_index = -1;
+    for (unsigned int i = 0; i < stream_ctx->ifmt_ctx_a->nb_streams; i++)
+	{
+		if (stream_ctx->ifmt_ctx_a->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+		{
+			audio_stream_index = i;
+			break;
+		}
+	}
+    if (audio_stream_index == -1)
+    {
+        fprintf(stderr, "cannot find audio stream input!\n");
+        return 1;
+    }
+    stream_ctx->audio_stream_index = audio_stream_index;
+
+    stream_ctx->in_codec_a = avcodec_find_decoder(stream_ctx->ifmt_ctx_a->streams[audio_stream_index]->codecpar->codec_id);
+    if (!stream_ctx->in_codec_a)
+    {
+        fprintf(stderr, "cannot find audio decoder!\n");
+        return 1;
+    }
+
     stream_ctx->in_codec_ctx_a = avcodec_alloc_context3(stream_ctx->in_codec_a);
+    if (!stream_ctx->in_codec_ctx_a)
+    {
+        fprintf(stderr, "cannot allocate audio decoder context!\n");
+        return 1;
+    }
 
-    //avcodec_parameters_to_context(stream_ctx->in_codec_ctx_a, stream_ctx->ifmt_ctx_a->streams[0]->codecpar);
+    avcodec_parameters_to_context(stream_ctx->in_codec_ctx_a, stream_ctx->ifmt_ctx_a->streams[audio_stream_index]->codecpar);
     if (avcodec_open2(stream_ctx->in_codec_ctx_a, stream_ctx->in_codec_a, NULL) != 0)
     {
         fprintf(stderr, "cannot initialize audio decoder!\n");
         return 1;
     }
 
-    return 0;
-}
-
-int init_output_avformat_context(stream_ctx_t* stream_ctx, const char* format_name)
-{
-    if (avformat_alloc_output_context2(&stream_ctx->ofmt_ctx, NULL, format_name, NULL) != 0)
+    stream_ctx->out_codec_a = avcodec_find_encoder(AV_CODEC_ID_AAC);
+    if (!stream_ctx->out_codec_a)
     {
-        fprintf(stderr, "cannot initialize output format context!\n");
+        fprintf(stderr, "cannot find audio encoder!\n");
         return 1;
     }
 
-    return 0;
-}
-
-int init_io_context(stream_ctx_t* stream_ctx, const char* output_path)
-{
-    if (avio_open2(&stream_ctx->ofmt_ctx->pb, output_path, AVIO_FLAG_WRITE, NULL, NULL) != 0)
+    stream_ctx->out_codec_ctx_a = avcodec_alloc_context3(stream_ctx->out_codec_a);
+    if (!stream_ctx->out_codec_ctx_a)
     {
-        fprintf(stderr, "could not open IO context!\n");
+        fprintf(stderr, "cannot allocate audio encoder context!\n");
+        return 1;
+    }
+	stream_ctx->out_codec_ctx_a->codec = stream_ctx->out_codec_a;
+	stream_ctx->out_codec_ctx_a->codec_id = stream_ctx->out_codec_a->id;
+	stream_ctx->out_codec_ctx_a->sample_rate = 48000;
+	stream_ctx->out_codec_ctx_a->channel_layout = 3;
+	stream_ctx->out_codec_ctx_a->channels = 2;
+	stream_ctx->out_codec_ctx_a->sample_fmt = AV_SAMPLE_FMT_FLTP;
+	stream_ctx->out_codec_ctx_a->codec_tag = 0;
+	stream_ctx->out_codec_ctx_a->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+    //avcodec_parameters_to_context(stream_ctx->out_codec_ctx, stream_ctx->ifmt_ctx->streams[stream_index]->codecpar);
+    if (avcodec_open2(stream_ctx->out_codec_ctx_a, stream_ctx->out_codec_a, NULL) != 0)
+    {
+        fprintf(stderr, "cannot initialize audio encoder!\n");
         return 1;
     }
 
-    return 0;
-}
-
-void set_codec_params(stream_ctx_t* stream_ctx, int width, int height, int fps)
-{
-    const AVRational dst_fps = { fps, 1 };
-
-    stream_ctx->out_codec_ctx->codec_tag = 0;
-    stream_ctx->out_codec_ctx->codec_id = AV_CODEC_ID_H264;
-    stream_ctx->out_codec_ctx->codec_type = AVMEDIA_TYPE_VIDEO;
-    stream_ctx->out_codec_ctx->width = width;
-    stream_ctx->out_codec_ctx->height = height;
-    stream_ctx->out_codec_ctx->gop_size = 12;
-    stream_ctx->out_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    stream_ctx->out_codec_ctx->framerate = dst_fps;
-    stream_ctx->out_codec_ctx->time_base = av_inv_q(dst_fps);
-
-    if (stream_ctx->ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+    if (avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, NULL, NULL, NULL) != 0)
     {
-        stream_ctx->out_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    }
-}
-
-void set_acodec_params(stream_ctx_t* stream_ctx)
-{
-    stream_ctx->out_codec_ctx_a->channels = 2;
-    stream_ctx->out_codec_ctx_a->channel_layout = av_get_default_channel_layout(2);
-    stream_ctx->out_codec_ctx_a->sample_rate = stream_ctx->ifmt_ctx_a->streams[0]->codec->sample_rate;
-    stream_ctx->out_codec_ctx_a->sample_fmt = stream_ctx->out_codec_a->sample_fmts[0];
-    stream_ctx->out_codec_ctx_a->bit_rate = 32000;
-    stream_ctx->out_codec_ctx_a->time_base.num = 1;
-    stream_ctx->out_codec_ctx_a->time_base.den = stream_ctx->out_codec_ctx_a->sample_rate;
-    stream_ctx->out_codec_ctx_a->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
-
-    if (stream_ctx->ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-    {
-        stream_ctx->out_codec_ctx_a->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    }
-}
-
-int init_codec_stream(stream_ctx_t* stream_ctx)
-{
-    if (avcodec_parameters_from_context(stream_ctx->out_stream->codecpar, stream_ctx->out_codec_ctx) != 0)
-    {
-        fprintf(stderr, "could not initialize video stream codec parameters!\n");
+        fprintf(stderr, "cannot initialize audio output format context!\n");
         return 1;
     }
 
-    AVDictionary* codec_options = NULL;
-#ifndef _WIN32
-    av_dict_set(&codec_options, "profile", "high", 0);
-#endif // !_WIN32
-    av_dict_set(&codec_options, "preset", "superfast", 0);
-    av_dict_set(&codec_options, "tune", "zerolatency", 0);
-
-    // open video encoder
-    if (avcodec_open2(stream_ctx->out_codec_ctx, stream_ctx->out_codec, &codec_options) != 0)
+    stream_ctx->out_stream_a = avformat_new_stream(stream_ctx->ofmt_ctx_a, stream_ctx->out_codec_a);
+    if (!stream_ctx->out_stream_a)
     {
-        fprintf(stderr, "could not open video encoder!\n");
+        fprintf(stderr, "cannot initialize audio output stream!\n");
         return 1;
     }
 
-    return 0;
-}
-
-int init_acodec_stream(stream_ctx_t* stream_ctx)
-{
     if (avcodec_parameters_from_context(stream_ctx->out_stream_a->codecpar, stream_ctx->out_codec_ctx_a) != 0)
     {
-        fprintf(stderr, "could not initialize audio stream codec parameters!\n");
+        fprintf(stderr, "cannot get audio output parameters!\n");
         return 1;
     }
 
-    /*
-    AVDictionary* codec_options = NULL;
-    if (avcodec_open2(stream_ctx->out_codec_ctx, stream_ctx->out_codec, &codec_options) != 0)
+    if (init_audio_sample(stream_ctx))
     {
-        fprintf(stderr, "could not open audio encoder!\n");
+        fprintf(stderr, "cannot init audio sample!\n");
         return 1;
     }
-    */
 
+    if (avio_open2(&stream_ctx->ofmt_ctx_a->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL) != 0)
+    {
+        fprintf(stderr, "could not open RTMP audio context!\n");
+        return 1;
+    }
+
+    if (avformat_write_header(stream_ctx->ofmt_ctx_a, NULL) != 0)
+    {
+        fprintf(stderr, "could not write header to audio output context!\n");
+        avio_close(stream_ctx->ofmt_ctx_a);
+        return 1;
+    }
     return 0;
 }
 
-struct SwsContext* initialize_video_sample_scaler(stream_ctx_t* stream_ctx)
+void stream(stream_ctx_t* stream_ctx)
 {
-    struct SwsContext* swsctx = sws_getContext(stream_ctx->in_codec_ctx->width, stream_ctx->in_codec_ctx->height, stream_ctx->in_codec_ctx->pix_fmt, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, stream_ctx->out_codec_ctx->pix_fmt, SWS_BICUBIC, NULL, NULL, NULL);
+    int ret = 0;
     
-    if (!swsctx)
-    {
-        fprintf(stderr, "could not initialize sample scaler!");
-    }
+    unsigned char* src_data[AV_NUM_DATA_POINTERS];
+	unsigned char* dst_data[AV_NUM_DATA_POINTERS];
+	int src_linesize[AV_NUM_DATA_POINTERS];
+	int dst_linesize[AV_NUM_DATA_POINTERS];
 
-    return swsctx;
-}
-/*
-struct SwsContext* initialize_audio_resampler(stream_ctx_t* stream_ctx)
-{
-    struct SwsContext* swsctx_a = swr_alloc_set_opts(NULL,
-        av_get_default_channel_layout(stream_ctx->out_codec_ctx_a->channels),
-        stream_ctx->out_codec_ctx_a->sample_fmt,
-        stream_ctx->out_codec_ctx_a->sample_rate,
-        av_get_default_channel_layout(stream_ctx->ifmt_ctx_a->streams[0]->codec->channels),
-        stream_ctx->ifmt_ctx_a->streams[0]->codec->sample_fmt,
-        stream_ctx->ifmt_ctx_a->streams[0]->codec->sample_rate,
-        0, NULL);
-    if (swr_init(swsctx_a) < 0) {
-        fprintf(stderr, "could not initialize audio resampler!");
+    AVPacket packet;
+	av_init_packet(&packet);
+	packet.data = NULL;
+	packet.size = 0;
+
+    struct SwsContext* sws_ctx = sws_getContext(stream_ctx->in_codec_ctx->width, 
+        stream_ctx->in_codec_ctx->height, 
+        stream_ctx->in_codec_ctx->pix_fmt, 
+        stream_ctx->out_codec_ctx->width, 
+        stream_ctx->out_codec_ctx->height, 
+        stream_ctx->out_codec_ctx->pix_fmt, 
+        SWS_BICUBIC, NULL, NULL, NULL);
+
+	int src_bufsize = av_image_alloc(src_data, src_linesize,
+        stream_ctx->out_codec_ctx->width,
+        stream_ctx->out_codec_ctx->height,
+        stream_ctx->out_codec_ctx->pix_fmt,
+		16);
+	int dst_bufsize = av_image_alloc(dst_data, dst_linesize, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, AV_PIX_FMT_YUV420P, 1);
+
+	AVFrame* outFrame = av_frame_alloc();
+	unsigned char* picture_buf = (uint8_t*)av_malloc(dst_bufsize);
+	av_image_fill_arrays(outFrame->data,
+		outFrame->linesize,
+		picture_buf,
+        stream_ctx->out_codec_ctx->pix_fmt,
+        stream_ctx->out_codec_ctx->width,
+        stream_ctx->out_codec_ctx->height,
+		1);
+	outFrame->format = stream_ctx->out_codec_ctx->pix_fmt;
+	outFrame->width = stream_ctx->out_codec_ctx->width;
+	outFrame->height = stream_ctx->out_codec_ctx->height;
+
+	int y_size = stream_ctx->out_codec_ctx->width * stream_ctx->out_codec_ctx->height;
+	AVPacket outpkt;
+	av_new_packet(&outpkt, dst_bufsize);
+
+	int loop = 0;
+	int got_picture = -1;
+	int delayedFrame = 0;
+    int samplebyte = 2;
+
+    int loop_a = 1;
+	int delayedFrame_a = 0;
+	int audio_count = 0;
+	AVPacket in_packet_a;
+	av_init_packet(&in_packet_a);
+	in_packet_a.data = NULL;
+	in_packet_a.size = 0;
+	AVPacket out_packet_a;
+	av_init_packet(&out_packet_a);
+	out_packet_a.data = NULL;
+	out_packet_a.size = 0;
+
+	AVFrame* pSrcAudioFrame = av_frame_alloc();
+	int got_frame = 0;
+	int out_packet_a_size = 0;
+
+    while (!end_stream)
+    {
+        //video
+        {
+            if (av_read_frame(stream_ctx->ifmt_ctx, &packet))
+            {
+                if (packet.stream_index == stream_ctx->stream_index) {
+
+                    memcpy(src_data[0], packet.data, packet.size);
+                    sws_scale(sws_ctx,
+                        src_data,
+                        src_linesize,
+                        0,
+                        stream_ctx->ifmt_ctx->streams[stream_ctx->stream_index]->codecpar->height,
+                        dst_data,
+                        dst_linesize);
+                    outFrame->data[0] = dst_data[0];
+                    outFrame->data[1] = dst_data[0] + y_size;
+                    outFrame->data[2] = dst_data[0] + y_size * 5 / 4;
+                    outFrame->pts = loop;
+                    loop++;
+
+                    ret = avcodec_send_frame(stream_ctx->out_codec_ctx, outFrame);
+                    if (ret < 0)
+                        continue;
+                    ret = avcodec_receive_packet(stream_ctx->out_codec_ctx, &outpkt);
+
+                    if (0 == ret)
+                    {
+                        outpkt.stream_index = stream_ctx->out_stream->index;
+                        AVRational itime = stream_ctx->ifmt_ctx->streams[packet.stream_index]->time_base;
+                        AVRational otime = stream_ctx->ofmt_ctx->streams[packet.stream_index]->time_base;
+
+                        outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                        outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                        outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                        outpkt.pos = -1;
+
+                        ret = av_interleaved_write_frame(stream_ctx->ofmt_ctx, &outpkt);
+                    }
+                    else {
+                        delayedFrame++;
+                    }
+                }
+                av_packet_unref(&packet);
+            }
+        }
+        
+        // audio
+        {
+            if (av_read_frame(stream_ctx->ifmt_ctx_a, &in_packet_a))
+            {
+                loop_a++;
+                if (0 >= in_packet_a.size)
+                {
+                    continue;
+                }
+
+                AVFrame* filter_frame = decode_audio(&in_packet_a, pSrcAudioFrame, stream_ctx->out_codec_ctx_a, stream_ctx->buffer_sink_ctx, stream_ctx->buffer_src_ctx);
+
+                if (filter_frame != NULL)
+                {
+                    //avcodec_encode_audio2(stream_ctx->out_codec_ctx_a, &out_packet, filter_frame, &got_frame);
+                    ret = avcodec_send_frame(stream_ctx->out_codec_ctx_a, filter_frame);
+                    if (ret < 0)
+                    {
+                        av_log(NULL, AV_LOG_ERROR, "avcodec_send_frame error.\n");
+                        break;
+                    }
+
+                    ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, &out_packet_a);
+
+                    /*
+                    auto streamTimeBase = octx->streams[out_packet.stream_index]->time_base.den;
+                    auto codecTimeBase = octx->streams[out_packet.stream_index]->codecpar->time_base.den;
+                    out_packet.pts = out_packet.dts = (1024 * streamTimeBase * audio_count) / codecTimeBase;
+                    audio_count++;
+                    auto inputStream = stream_ctx->ifmt_ctx_a->streams[out_packet.stream_index];
+                    auto outputStream = octx->streams[out_packet.stream_index];
+                    av_packet_rescale_ts(&out_packet, inputStream->time_base, outputStream->time_base);
+                    */
+
+                    out_packet_a.stream_index = stream_ctx->out_stream_a->index;
+                    AVRational itime = stream_ctx->ifmt_ctx_a->streams[out_packet_a.stream_index]->time_base;
+                    AVRational otime = stream_ctx->ofmt_ctx_a->streams[out_packet_a.stream_index]->time_base;
+
+                    out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                    out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                    out_packet_a.duration = av_rescale_q_rnd(in_packet_a.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                    out_packet_a.pos = -1;
+
+                    out_packet_a_size += out_packet_a.size;
+
+                    av_interleaved_write_frame(stream_ctx->ofmt_ctx_a, &out_packet_a);
+                    av_packet_unref(&out_packet_a);
+                }
+
+                av_packet_unref(&in_packet_a);
+            }
+        }
     }
-    return swsctx_a;
 }
-*/
+
+int init_audio_sample(stream_ctx_t* stream_ctx)
+{
+	char args[512] = {'\0'};
+	int ret;
+	const AVFilter* abuffersrc = avfilter_get_by_name("abuffer");
+	const AVFilter* abuffersink = avfilter_get_by_name("abuffersink");
+	AVFilterInOut* outputs = avfilter_inout_alloc();
+	AVFilterInOut* inputs = avfilter_inout_alloc();
+
+	auto audioDecoderContext = stream_ctx->ifmt_ctx_a->streams[0]->codecpar;
+	if (!audioDecoderContext->channel_layout)
+		audioDecoderContext->channel_layout = av_get_default_channel_layout(audioDecoderContext->channels);
+
+	static const enum AVSampleFormat out_sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
+	static const int64_t out_channel_layouts[] = { audioDecoderContext->channel_layout, -1 };
+	static const int out_sample_rates[] = { audioDecoderContext->sample_rate , -1 };
+
+	AVRational time_base = stream_ctx->ifmt_ctx_a->streams[0]->time_base;
+	stream_ctx->filter_graph = avfilter_graph_alloc();
+	stream_ctx->filter_graph->nb_threads = 1;
+
+	sprintf_s(args, sizeof(args),
+		"time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%I64x",
+		time_base.num, time_base.den, audioDecoderContext->sample_rate,
+		av_get_sample_fmt_name(audioDecoderContext->format), audioDecoderContext->channel_layout);
+
+	ret = avfilter_graph_create_filter(&stream_ctx->buffer_src_ctx, abuffersrc, "in",
+		args, NULL, stream_ctx->filter_graph);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer source\n");
+		return ret;
+	}
+
+	/* buffer audio sink: to terminate the filter chain. */
+	ret = avfilter_graph_create_filter(&stream_ctx->buffer_sink_ctx, abuffersink, "out",
+		NULL, NULL, stream_ctx->filter_graph);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot create audio buffer sink\n");
+		return ret;
+	}
+
+	ret = av_opt_set_int_list(stream_ctx->buffer_sink_ctx, "sample_fmts", out_sample_fmts, -1,
+		AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set output sample format\n");
+		return ret;
+	}
+
+	ret = av_opt_set_int_list(stream_ctx->buffer_sink_ctx, "channel_layouts", out_channel_layouts, -1,
+		AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set output channel layout\n");
+		return ret;
+	}
+
+	ret = av_opt_set_int_list(stream_ctx->buffer_sink_ctx, "sample_rates", out_sample_rates, -1,
+		AV_OPT_SEARCH_CHILDREN);
+	if (ret < 0) {
+		av_log(NULL, AV_LOG_ERROR, "Cannot set output sample rate\n");
+		return ret;
+	}
+
+	/* Endpoints for the filter graph. */
+	outputs->name = av_strdup("in");
+	outputs->filter_ctx = stream_ctx->buffer_src_ctx;;
+	outputs->pad_idx = 0;
+	outputs->next = NULL;
+
+	inputs->name = av_strdup("out");
+	inputs->filter_ctx = stream_ctx->buffer_sink_ctx;
+	inputs->pad_idx = 0;
+	inputs->next = NULL;
+
+	if ((ret = avfilter_graph_parse_ptr(stream_ctx->filter_graph, "anull",
+		&inputs, &outputs, NULL)) < 0)
+		return ret;
+
+	if ((ret = avfilter_graph_config(stream_ctx->filter_graph, NULL)) < 0)
+		return ret;
+
+	av_buffersink_set_frame_size(stream_ctx->buffer_sink_ctx, 1024);
+	return 0;
+}
+
+AVFrame* decode_audio(AVPacket* in_packet, 
+	AVFrame* src_audio_frame, 
+	AVCodecContext* decode_codectx, 
+	AVFilterContext* buffer_sink_ctx, 
+	AVFilterContext* buffer_src_ctx)
+{
+	int gotFrame;
+	AVFrame* filtFrame = NULL;
+
+	int ret = avcodec_send_packet(decode_codectx, in_packet);
+	if (ret != 0)
+	{
+		return NULL;
+	}
+
+	while (ret >= 0)
+	{
+		ret = avcodec_receive_frame(decode_codectx, src_audio_frame);
+		if (ret < 0)
+		{
+			break;
+		}
+
+		if (av_buffersrc_add_frame_flags(buffer_src_ctx, src_audio_frame, AV_BUFFERSRC_FLAG_PUSH) < 0) {
+			av_log(NULL, AV_LOG_ERROR, "buffe src add frame error!\n");
+			return NULL;
+		}
+
+		filtFrame = av_frame_alloc();
+		int ret = av_buffersink_get_frame_flags(buffer_sink_ctx, filtFrame, AV_BUFFERSINK_FLAG_NO_REQUEST);
+		if (ret < 0)
+		{
+			av_frame_free(&filtFrame);
+			return NULL;
+		}
+		return filtFrame;
+	}
+
+	return NULL;
+}
+
+double av_r2d(AVRational r)
+{
+	if (r.num == 0 || r.den == 0) return 0.0;
+	else return (double)r.num / r.den;
+}
+
+void av_free_context(AVFormatContext* ictx, AVFormatContext* octx)
+{
+	if (NULL != ictx)
+	{
+		avformat_close_input(&ictx);
+	}
+
+	if (NULL != octx)
+	{
+		avformat_free_context(&octx);
+	}
+}
+
 char* concat_str(const char* s1, const char* s2)
 {
     const size_t len1 = strlen(s1);
@@ -463,10 +709,4 @@ const char* get_adevice_family()
 #endif
 
     return adevice_family;
-}
-
-void handle_signal(int signal)
-{
-    fprintf(stderr, "Caught SIGINT, exiting now...\n");
-    end_stream = true;
 }
