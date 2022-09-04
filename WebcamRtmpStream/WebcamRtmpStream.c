@@ -157,7 +157,7 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
             av_new_packet(pkt, 0);
             av_frame_free(&outframe);
         }
-
+        /*
         if (av_read_frame(stream_ctx->ifmt_ctx_a, pkt_a) >= 0) {
             frame_a = av_frame_alloc();
             if (avcodec_send_packet(stream_ctx->in_codec_ctx_a, pkt_a) != 0)
@@ -175,14 +175,7 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
             av_packet_unref(pkt_a);
             av_new_packet(pkt_a, 0);
 
-            /* TODO: RESAMPLE AUDIO HERE */
-            /*
-            swr_convert(aud_convert_ctx,
-					converted_input_samples, input_frame->nb_samples,
-					(const uint8_t**)input_frame->extended_data, input_frame->nb_samples)
-             avcodec_encode_audio2(pCodecCtx_a, &output_packet,
-                output_frame, &enc_got_frame_a)
-            */
+            // TODO: RESAMPLE AUDIO HERE
             outframe_a = frame_a;
             av_frame_free(&frame_a);
             outframe_a->pts = pts_a++;
@@ -207,6 +200,7 @@ void stream_video(const char* device_index, const char* adevice_index, const cha
             av_new_packet(pkt_a, 0);
             av_frame_free(&outframe_a);
         }
+        */
     }
 
     av_write_trailer(stream_ctx->ofmt_ctx);
