@@ -287,11 +287,8 @@ int init_adevice_and_input_context(stream_ctx_t* stream_ctx, const char* adevice
     stream_ctx->in_stream_a = avformat_new_stream(stream_ctx->ifmt_ctx_a, stream_ctx->in_codec_a);
     stream_ctx->in_codec_ctx_a = avcodec_alloc_context3(stream_ctx->in_codec_a);
 
-    AVDictionary* codec_options = NULL;
-    const char* channels = "2";
-    av_dict_set(&codec_options, "channels", channels, 0);
     //avcodec_parameters_to_context(stream_ctx->in_codec_ctx_a, stream_ctx->ifmt_ctx_a->streams[0]->codecpar);
-    if (avcodec_open2(stream_ctx->in_codec_ctx_a, stream_ctx->in_codec_a, &codec_options) != 0)
+    if (avcodec_open2(stream_ctx->in_codec_ctx_a, stream_ctx->in_codec_a, NULL) != 0)
     {
         fprintf(stderr, "cannot initialize audio decoder!\n");
         return 1;
