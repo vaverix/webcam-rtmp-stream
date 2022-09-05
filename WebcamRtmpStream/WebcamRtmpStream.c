@@ -196,7 +196,8 @@ int init_video(stream_ctx_t* stream_ctx)
     }
     av_dict_free(&eoptions);
 
-    if (avformat_alloc_output_context2(&stream_ctx->ofmt_ctx, NULL, stream_ctx->output_format, NULL) != 0)
+    avformat_alloc_output_context2(&stream_ctx->ofmt_ctx, 0, stream_ctx->output_format, stream_ctx->output_path);
+    if (!stream_ctx->ofmt_ctx)
     {
         fprintf(stderr, "cannot initialize video output format context!\n");
         return 1;
@@ -318,7 +319,8 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
 
-    if (avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, NULL, "adts", NULL) != 0)
+    avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, 0, 0, stream_ctx->output_path);
+    if (!stream_ctx->ofmt_ctx_a)
     {
         fprintf(stderr, "cannot initialize audio output format context!\n");
         return 1;
