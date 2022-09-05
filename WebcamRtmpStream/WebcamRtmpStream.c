@@ -484,25 +484,26 @@ void stream(stream_ctx_t* stream_ctx)
                     loop++;
 
                     ret = avcodec_send_frame(stream_ctx->out_codec_ctx, outFrame);
-                    if (ret < 0)
-                        continue;
-                    ret = avcodec_receive_packet(stream_ctx->out_codec_ctx, &outpkt);
-
-                    if (0 == ret)
+                    if (ret == 0)
                     {
-                        outpkt.stream_index = stream_ctx->out_stream->index;
-                        AVRational itime = stream_ctx->ifmt_ctx->streams[packet.stream_index]->time_base;
-                        AVRational otime = stream_ctx->ofmt_ctx->streams[packet.stream_index]->time_base;
+                        ret = avcodec_receive_packet(stream_ctx->out_codec_ctx, &outpkt);
 
-                        outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                        outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                        outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                        outpkt.pos = -1;
+                        if (0 == ret)
+                        {
+                            outpkt.stream_index = stream_ctx->out_stream->index;
+                            AVRational itime = stream_ctx->ifmt_ctx->streams[packet.stream_index]->time_base;
+                            AVRational otime = stream_ctx->ofmt_ctx->streams[packet.stream_index]->time_base;
 
-                        ret = av_interleaved_write_frame(stream_ctx->ofmt_ctx, &outpkt);
-                    }
-                    else {
-                        delayedFrame++;
+                            outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            outpkt.pos = -1;
+
+                            ret = av_interleaved_write_frame(stream_ctx->ofmt_ctx, &outpkt);
+                        }
+                        else {
+                            delayedFrame++;
+                        }
                     }
                 }
                 av_packet_unref(&packet);
@@ -513,19 +514,16 @@ void stream(stream_ctx_t* stream_ctx)
         {
             if (av_read_frame(stream_ctx->ifmt_ctx_a, &in_packet_a) >= 0)
             {
-                fprintf(stdout, "a1\n");
                 loop_a++;
                 if (0 >= in_packet_a.size)
                 {
                     continue;
                 }
-                fprintf(stdout, "a2\n");
 
                 AVFrame* filter_frame = decode_audio(&in_packet_a, pSrcAudioFrame, stream_ctx->in_codec_ctx_a, stream_ctx->buffer_sink_ctx, stream_ctx->buffer_src_ctx);
 
                 if (filter_frame != NULL)
                 {
-                    fprintf(stdout, "a3\n");
                     //avcodec_encode_audio2(stream_ctx->out_codec_ctx_a, &out_packet, filter_frame, &got_frame);
                     ret = avcodec_send_frame(stream_ctx->out_codec_ctx_a, filter_frame);
                     if (ret < 0)
@@ -534,29 +532,23 @@ void stream(stream_ctx_t* stream_ctx)
                         break;
                     }
 
-                    fprintf(stdout, "a4\n");
                     ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, &out_packet_a);
-                    //in_packet_a.stream_index = stream_ctx->in_stream_a->index;
-                    //out_packet_a.stream_index = stream_ctx->out_stream_a->index;
-                    /*
-                    fprintf(stdout, "a6a\n");
-                    AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
-                    fprintf(stdout, "a6b\n");
-                    AVRational otime = stream_ctx->ofmt_ctx->streams[out_packet_a.stream_index]->time_base;
-                    fprintf(stdout, "a6c\n");
-                    fprintf(stdout, "a7\n");
+                    if (ret == 0)
+                    {
+                        //in_packet_a.stream_index = stream_ctx->in_stream_a->index;
+                        //out_packet_a.stream_index = stream_ctx->out_stream_a->index;
+                        AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
+                        AVRational otime = stream_ctx->ofmt_ctx->streams[out_packet_a.stream_index]->time_base;
 
-                    out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                    out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                    out_packet_a.duration = av_rescale_q_rnd(in_packet_a.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                    out_packet_a.pos = -1;
-                    */
-                    out_packet_a_size += out_packet_a.size;
-                    fprintf(stdout, "a8\n");
+                        out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                        out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                        out_packet_a.duration = av_rescale_q_rnd(in_packet_a.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                        out_packet_a.pos = -1;
+                        out_packet_a_size += out_packet_a.size;
 
-                    av_interleaved_write_frame(stream_ctx->ofmt_ctx, &out_packet_a);
-                    fprintf(stdout, "a9\n");
-                    av_packet_unref(&out_packet_a);
+                        av_interleaved_write_frame(stream_ctx->ofmt_ctx, &out_packet_a);
+                        av_packet_unref(&out_packet_a);
+                    }
                 }
 
                 av_packet_unref(&in_packet_a);
