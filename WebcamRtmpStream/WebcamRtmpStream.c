@@ -216,21 +216,6 @@ int init_video(stream_ctx_t* stream_ctx)
         return 1;
     }
 
-    //av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
-    int ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
-    if (ret != 0)
-    {
-        fprintf(stderr, "could not open video RTMP context! error code: ");
-        fprintf(stderr, ret);
-        return 1;
-    }
-
-    if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
-    {
-        fprintf(stderr, "could not write header to audio/video ouput context!\n");
-        avio_close(stream_ctx->ofmt_ctx);
-        return 1;
-    }
     return 0;
 }
 
@@ -320,15 +305,16 @@ int init_audio(stream_ctx_t* stream_ctx)
         fprintf(stderr, "cannot initialize audio encoder!\n");
         return 1;
     }
-
-    avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, 0, "adts", stream_ctx->output_path);
-    if (!stream_ctx->ofmt_ctx_a)
+    /*
+    avformat_alloc_output_context2(&stream_ctx->ofmt_ctx, 0, "adts", stream_ctx->output_path);
+    if (!stream_ctx->ofmt_ctx)
     {
         fprintf(stderr, "cannot initialize audio output format context!\n");
         return 1;
     }
+    */
 
-    stream_ctx->out_stream_a = avformat_new_stream(stream_ctx->ofmt_ctx_a, stream_ctx->out_codec_a);
+    stream_ctx->out_stream_a = avformat_new_stream(stream_ctx->ofmt_ctx, stream_ctx->out_codec_a);
     if (!stream_ctx->out_stream_a)
     {
         fprintf(stderr, "cannot initialize audio output stream!\n");
@@ -346,8 +332,8 @@ int init_audio(stream_ctx_t* stream_ctx)
         fprintf(stderr, "cannot init audio sample!\n");
         return 1;
     }
-
-    int ret = avio_open2(&stream_ctx->ofmt_ctx_a->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
+    /*
+    int ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
     if (ret != 0)
     {
         fprintf(stderr, "could not open audio RTMP context! error code: ");
@@ -355,12 +341,13 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
 
-    if (avformat_write_header(stream_ctx->ofmt_ctx_a, NULL) != 0)
+    if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
     {
         fprintf(stderr, "could not write header to audio output context!\n");
-        avio_close(stream_ctx->ofmt_ctx_a);
+        avio_close(stream_ctx->ofmt_ctx);
         return 1;
     }
+    */
     return 0;
 }
 
@@ -372,6 +359,22 @@ void stream(stream_ctx_t* stream_ctx)
 	unsigned char* dst_data[AV_NUM_DATA_POINTERS];
 	int src_linesize[AV_NUM_DATA_POINTERS];
 	int dst_linesize[AV_NUM_DATA_POINTERS];
+
+    av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
+    int ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
+    if (ret != 0)
+    {
+        fprintf(stderr, "could not open RTMP context! error code: ");
+        fprintf(stderr, ret);
+        return 1;
+    }
+
+    if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
+    {
+        fprintf(stderr, "could not write header to audio/video ouput context!\n");
+        avio_close(stream_ctx->ofmt_ctx);
+        return 1;
+    }
 
     AVPacket packet;
 	av_init_packet(&packet);
@@ -504,18 +507,18 @@ void stream(stream_ctx_t* stream_ctx)
                     ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, &out_packet_a);
 
                     /*
-                    auto streamTimeBase = octx->streams[out_packet.stream_index]->time_base.den;
-                    auto codecTimeBase = octx->streams[out_packet.stream_index]->codecpar->time_base.den;
+                    auto streamTimeBase = stream_ctx->ofmt_ctx->streams[out_packet.stream_index]->time_base.den;
+                    auto codecTimeBase = stream_ctx->ofmt_ctx->streams[out_packet.stream_index]->codecpar->time_base.den;
                     out_packet.pts = out_packet.dts = (1024 * streamTimeBase * audio_count) / codecTimeBase;
                     audio_count++;
                     auto inputStream = stream_ctx->ifmt_ctx_a->streams[out_packet.stream_index];
-                    auto outputStream = octx->streams[out_packet.stream_index];
+                    auto outputStream = stream_ctx->ofmt_ctx->streams[out_packet.stream_index];
                     av_packet_rescale_ts(&out_packet, inputStream->time_base, outputStream->time_base);
                     */
 
                     out_packet_a.stream_index = stream_ctx->out_stream_a->index;
                     AVRational itime = stream_ctx->ifmt_ctx_a->streams[out_packet_a.stream_index]->time_base;
-                    AVRational otime = stream_ctx->ofmt_ctx_a->streams[out_packet_a.stream_index]->time_base;
+                    AVRational otime = stream_ctx->ofmt_ctx->streams[out_packet_a.stream_index]->time_base;
 
                     out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                     out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
@@ -524,7 +527,7 @@ void stream(stream_ctx_t* stream_ctx)
 
                     out_packet_a_size += out_packet_a.size;
 
-                    av_interleaved_write_frame(stream_ctx->ofmt_ctx_a, &out_packet_a);
+                    av_interleaved_write_frame(stream_ctx->ofmt_ctx, &out_packet_a);
                     av_packet_unref(&out_packet_a);
                 }
 
@@ -664,16 +667,16 @@ double av_r2d(AVRational r)
 	else return (double)r.num / r.den;
 }
 
-void av_free_context(AVFormatContext* ictx, AVFormatContext* octx)
+void av_free_context(AVFormatContext* ifmt_ctx, AVFormatContext* ofmt_ctx)
 {
-	if (NULL != ictx)
+	if (NULL != ifmt_ctx)
 	{
-		avformat_close_input(&ictx);
+		avformat_close_input(&ifmt_ctx);
 	}
 
-	if (NULL != octx)
+	if (NULL != ofmt_ctx)
 	{
-		avformat_free_context(octx);
+		avformat_free_context(ofmt_ctx);
 	}
 }
 

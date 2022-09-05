@@ -31,7 +31,7 @@ typedef struct stream_ctx_t
 	char* adevice_index;
 	int width, height, fps, stream_index, audio_stream_index;
 	AVInputFormat* ifmt, * ifmt_a;
-	AVFormatContext* ifmt_ctx, * ifmt_ctx_a, * ofmt_ctx, * ofmt_ctx_a;
+	AVFormatContext* ifmt_ctx, * ifmt_ctx_a, * ofmt_ctx;
 	AVCodec* in_codec, * in_codec_a, * out_codec, * out_codec_a;
 	AVStream* in_stream, * in_stream_a, * out_stream, * out_stream_a;
 	AVCodecContext* in_codec_ctx, * in_codec_ctx_a, * out_codec_ctx, * out_codec_ctx_a;
@@ -50,7 +50,7 @@ void stream(stream_ctx_t* stream_ctx);
 int init_audio_sample(stream_ctx_t* stream_ctx);
 AVFrame* decode_audio(AVPacket* in_packet, AVFrame* src_audio_frame, AVCodecContext* decode_codectx, AVFilterContext* buffer_sink_ctx, AVFilterContext* buffer_src_ctx);
 double av_r2d(AVRational r);
-void av_free_context(AVFormatContext* ictx, AVFormatContext* octx);
+void av_free_context(AVFormatContext* ifmt_ctx, AVFormatContext* ofmt_ctx);
 char* concat_str(const char* s1, const char* s2);
 const char* get_device_family();
 const char* get_adevice_family();
