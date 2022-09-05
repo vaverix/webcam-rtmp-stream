@@ -1,7 +1,7 @@
 # webcam-rtmp-stream
 
 Webcam capture streaming via RTMP or saving into video file. Cross-platform.
-Sound device support added.
+Sound device support added. Aimed mainly for Linux servers with no gpu.
 
 ## Inspirations
 
