@@ -365,8 +365,8 @@ void stream(stream_ctx_t* stream_ctx)
 {
     int ret = 0;
     
-    const unsigned char* src_data[AV_NUM_DATA_POINTERS];
-	const unsigned char* dst_data[AV_NUM_DATA_POINTERS];
+    unsigned char* src_data[AV_NUM_DATA_POINTERS];
+	unsigned char* dst_data[AV_NUM_DATA_POINTERS];
 	int src_linesize[AV_NUM_DATA_POINTERS];
 	int dst_linesize[AV_NUM_DATA_POINTERS];
 
