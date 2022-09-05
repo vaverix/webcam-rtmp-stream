@@ -77,9 +77,6 @@ int init(const char* device_index, const char* adevice_index, const char* output
     avdevice_register_all();
     avformat_network_init();
 
-    const char* device_family = get_device_family();
-    const char* adevice_family = get_adevice_family();
-
     stream_ctx_t* stream_ctx = malloc(sizeof(stream_ctx_t));
     stream_ctx->output_path = malloc(strlen(output_path) + 1);
     stream_ctx->output_format = malloc(strlen(output_format) + 1);
@@ -135,7 +132,7 @@ int init_video(stream_ctx_t* stream_ctx)
     av_dict_set(&ioptions, "pixel_format", av_get_pix_fmt_name(AV_PIX_FMT_YUYV422), 0);
     av_dict_set(&ioptions, "probesize", "7000000", 0);
 
-    stream_ctx->ifmt = av_find_input_format(stream_ctx->device_index);
+    stream_ctx->ifmt = av_find_input_format(device_family);
     if (avformat_open_input(&stream_ctx->ifmt_ctx, stream_ctx->device_index, stream_ctx->ifmt, &ioptions) != 0)
     {
         fprintf(stderr, "cannot initialize video input device!\n");
@@ -241,7 +238,7 @@ int init_audio(stream_ctx_t* stream_ctx)
     AVDictionary* ioptions = NULL;
     av_dict_set_int(&ioptions, "audio_buffer_size", 20, 0);
 
-    stream_ctx->ifmt_a = av_find_input_format(stream_ctx->adevice_index);
+    stream_ctx->ifmt_a = av_find_input_format(device_family);
     if (avformat_open_input(&stream_ctx->ifmt_ctx_a, stream_ctx->adevice_index, stream_ctx->ifmt_a, &ioptions) != 0)
     {
         fprintf(stderr, "cannot initialize audio input device!\n");
