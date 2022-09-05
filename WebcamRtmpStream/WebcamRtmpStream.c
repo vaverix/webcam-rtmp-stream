@@ -217,9 +217,11 @@ int init_video(stream_ctx_t* stream_ctx)
     }
 
     //av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
-    if (avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL) != 0)
+    int ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
+    if (ret != 0)
     {
-        fprintf(stderr, "could not open RTMP context!\n");
+        fprintf(stderr, "could not open video RTMP context! error code: ");
+        fprintf(stderr, ret);
         return 1;
     }
 
@@ -319,7 +321,7 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
 
-    avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, 0, 0, stream_ctx->output_path);
+    avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, 0, "adts", stream_ctx->output_path);
     if (!stream_ctx->ofmt_ctx_a)
     {
         fprintf(stderr, "cannot initialize audio output format context!\n");
@@ -345,9 +347,11 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
 
-    if (avio_open2(&stream_ctx->ofmt_ctx_a->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL) != 0)
+    int ret = avio_open2(&stream_ctx->ofmt_ctx_a->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
+    if (ret != 0)
     {
-        fprintf(stderr, "could not open RTMP audio context!\n");
+        fprintf(stderr, "could not open audio RTMP context! error code: ");
+        fprintf(stderr, ret);
         return 1;
     }
 
