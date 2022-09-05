@@ -32,7 +32,7 @@ int main(int argc, char* argv[])
 
     fprintf(stdout, "Video and audio initialized, starting streaming...\n");
     stream(stream_ctx);
-    clean_up(stream_ctx);
+    //clean_up(stream_ctx);
 
     return 0;
 }
@@ -453,10 +453,10 @@ int stream(stream_ctx_t* stream_ctx)
     {
         //video
         {
-	        av_new_packet(in_packet, 0);
+	        in_packet = av_packet_alloc();
             if (av_read_frame(stream_ctx->ifmt_ctx, in_packet) >= 0)
             {
-                if (packet->stream_index == stream_ctx->stream_index) {
+                if (in_packet->stream_index == stream_ctx->stream_index) {
 
                     frame = av_frame_alloc();
                     if (avcodec_send_packet(stream_ctx->in_codec_ctx, in_packet) != 0)
@@ -487,17 +487,6 @@ int stream(stream_ctx_t* stream_ctx)
                         if (0 == ret)
                         {
                             outpkt.stream_index = stream_ctx->out_stream->index;
-                            /*
-                            AVRational itime = stream_ctx->ifmt_ctx->streams[packet.stream_index]->time_base;
-                            AVRational otime = stream_ctx->ofmt_ctx->streams[packet.stream_index]->time_base;
-
-                            outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            //outpkt.pts = av_rescale_q(packet.pts, itime, otime);
-                            //outpkt.dts = av_rescale_q(packet.dts, itime, otime);
-                            //outpkt.duration = av_rescale_q(packet.duration, itime, otime);
-                            */
                             outpkt.pts = av_rescale_q(outpkt.pts, stream_ctx->out_codec_ctx->time_base, stream_ctx->out_stream->time_base);
                             outpkt.dts = av_rescale_q(outpkt.dts, stream_ctx->out_codec_ctx->time_base, stream_ctx->out_stream->time_base);
                             outpkt.pos = -1;
@@ -513,7 +502,8 @@ int stream(stream_ctx_t* stream_ctx)
         }
         // audio
         {
-	        av_new_packet(in_packet_a, 0);
+	        in_packet_a = av_packet_alloc();
+	        out_packet_a = av_packet_alloc();
             if (av_read_frame(stream_ctx->ifmt_ctx_a, in_packet_a) >= 0)
             {
                 loop_a++;
@@ -538,14 +528,6 @@ int stream(stream_ctx_t* stream_ctx)
                     if (ret == 0)
                     {
                         out_packet_a->stream_index = stream_ctx->out_stream_a->index;
-                        /*
-                        AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
-                        AVRational otime = stream_ctx->ofmt_ctx->streams[in_packet_a.stream_index]->time_base;
-
-                        out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                        out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                        out_packet_a.duration = av_rescale_q_rnd(in_packet_a.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                        */
                         out_packet_a->pts = av_rescale_q(out_packet_a->pts, stream_ctx->out_codec_ctx_a->time_base, stream_ctx->out_stream_a->time_base);
                         out_packet_a->dts = av_rescale_q(out_packet_a->dts, stream_ctx->out_codec_ctx_a->time_base, stream_ctx->out_stream_a->time_base);
                         out_packet_a->pos = -1;
@@ -559,6 +541,7 @@ int stream(stream_ctx_t* stream_ctx)
         }
         av_packet_free(&packet);
         av_packet_free(&in_packet_a);
+        av_packet_free(&out_packet_a);
     }
 }
 
