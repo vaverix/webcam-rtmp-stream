@@ -116,6 +116,7 @@ int init(const char* device_index, const char* adevice_index, const char* output
 
 int init_video(stream_ctx_t* stream_ctx)
 {
+    int ret;
     const char* device_family = get_device_family();
     char fps_str[5], width_str[5], height_str[5];
     sprintf(fps_str, "%d", stream_ctx->fps);
@@ -221,6 +222,7 @@ int init_video(stream_ctx_t* stream_ctx)
 
 int init_audio(stream_ctx_t* stream_ctx)
 {
+    int ret;
     const char* device_family = get_adevice_family();
 
     AVDictionary* ioptions = NULL;
@@ -333,7 +335,7 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
     /*
-    int ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
+    ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
     if (ret != 0)
     {
         fprintf(stderr, "could not open audio RTMP context! error code: ");
@@ -361,7 +363,7 @@ void stream(stream_ctx_t* stream_ctx)
 	int dst_linesize[AV_NUM_DATA_POINTERS];
 
     av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
-    int ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
+    ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
     if (ret != 0)
     {
         fprintf(stderr, "could not open RTMP context! error code: ");
@@ -626,10 +628,10 @@ AVFrame* decode_audio(AVPacket* in_packet,
 	AVFilterContext* buffer_sink_ctx, 
 	AVFilterContext* buffer_src_ctx)
 {
-	int gotFrame;
+	int ret, gotFrame;
 	AVFrame* filtFrame = NULL;
 
-	int ret = avcodec_send_packet(decode_codectx, in_packet);
+	ret = avcodec_send_packet(decode_codectx, in_packet);
 	if (ret != 0)
 	{
 		return NULL;
@@ -649,7 +651,7 @@ AVFrame* decode_audio(AVPacket* in_packet,
 		}
 
 		filtFrame = av_frame_alloc();
-		int ret = av_buffersink_get_frame_flags(buffer_sink_ctx, filtFrame, AV_BUFFERSINK_FLAG_NO_REQUEST);
+		ret = av_buffersink_get_frame_flags(buffer_sink_ctx, filtFrame, AV_BUFFERSINK_FLAG_NO_REQUEST);
 		if (ret < 0)
 		{
 			av_frame_free(&filtFrame);
