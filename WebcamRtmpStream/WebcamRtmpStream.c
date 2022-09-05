@@ -521,7 +521,7 @@ void stream(stream_ctx_t* stream_ctx)
                 }
                 fprintf(stdout, "a2\n");
 
-                AVFrame* filter_frame = decode_audio(&in_packet_a, pSrcAudioFrame, stream_ctx->out_codec_ctx_a, stream_ctx->buffer_sink_ctx, stream_ctx->buffer_src_ctx);
+                AVFrame* filter_frame = decode_audio(&in_packet_a, pSrcAudioFrame, stream_ctx->in_codec_ctx_a, stream_ctx->buffer_sink_ctx, stream_ctx->buffer_src_ctx);
 
                 if (filter_frame != NULL)
                 {
@@ -534,8 +534,10 @@ void stream(stream_ctx_t* stream_ctx)
                         break;
                     }
 
+                    fprintf(stdout, "a4\n");
                     ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, &out_packet_a);
 
+                    fprintf(stdout, "a5\n");
                     /*
                     auto streamTimeBase = stream_ctx->ofmt_ctx->streams[out_packet.stream_index]->time_base.den;
                     auto codecTimeBase = stream_ctx->ofmt_ctx->streams[out_packet.stream_index]->codecpar->time_base.den;
@@ -545,11 +547,16 @@ void stream(stream_ctx_t* stream_ctx)
                     auto outputStream = stream_ctx->ofmt_ctx->streams[out_packet.stream_index];
                     av_packet_rescale_ts(&out_packet, inputStream->time_base, outputStream->time_base);
                     */
-                    fprintf(stdout, "a4\n");
+                    fprintf(stdout, "a6\n");
 
+                    in_packet_a.stream_index = stream_ctx->in_stream_a->index;
                     out_packet_a.stream_index = stream_ctx->out_stream_a->index;
-                    AVRational itime = stream_ctx->ifmt_ctx_a->streams[out_packet_a.stream_index]->time_base;
+                    fprintf(stdout, "a6a\n");
+                    AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
+                    fprintf(stdout, "a6b\n");
                     AVRational otime = stream_ctx->ofmt_ctx->streams[out_packet_a.stream_index]->time_base;
+                    fprintf(stdout, "a6c\n");
+                    fprintf(stdout, "a7\n");
 
                     out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                     out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
@@ -557,10 +564,10 @@ void stream(stream_ctx_t* stream_ctx)
                     out_packet_a.pos = -1;
 
                     out_packet_a_size += out_packet_a.size;
-                    fprintf(stdout, "a5\n");
+                    fprintf(stdout, "a8\n");
 
                     av_interleaved_write_frame(stream_ctx->ofmt_ctx, &out_packet_a);
-                    fprintf(stdout, "a6\n");
+                    fprintf(stdout, "a9\n");
                     av_packet_unref(&out_packet_a);
                 }
 
@@ -579,44 +586,34 @@ AVFrame* decode_audio(AVPacket* in_packet,
 	int ret, gotFrame;
 	AVFrame* filtFrame = NULL;
 
-    fprintf(stdout, "d1\n");
 	ret = avcodec_send_packet(decode_codectx, in_packet);
 	if (ret != 0)
 	{
-        fprintf(stdout, "d-2\n");
         fprintf(stdout, "cannot send audio packet to the decoder\n");
         fprintf(stdout, "code %i", ret);
 		return NULL;
 	}
-    fprintf(stdout, "d3\n");
 
 	while (ret >= 0)
 	{
-        fprintf(stdout, "d4\n");
 		ret = avcodec_receive_frame(decode_codectx, src_audio_frame);
 		if (ret < 0)
 		{
-            fprintf(stdout, "d-5\n");
 			break;
 		}
-        fprintf(stdout, "d6\n");
 
 		if (av_buffersrc_add_frame_flags(buffer_src_ctx, src_audio_frame, AV_BUFFERSRC_FLAG_PUSH) < 0) {
 			av_log(NULL, AV_LOG_ERROR, "buffe src add frame error!\n");
-        fprintf(stdout, "d-7\n");
 			return NULL;
 		}
-        fprintf(stdout, "d8\n");
 
 		filtFrame = av_frame_alloc();
 		ret = av_buffersink_get_frame_flags(buffer_sink_ctx, filtFrame, AV_BUFFERSINK_FLAG_NO_REQUEST);
 		if (ret < 0)
 		{
-            fprintf(stdout, "d-9\n");
 			av_frame_free(&filtFrame);
 			return NULL;
 		}
-        fprintf(stdout, "d10\n");
 		return filtFrame;
 	}
 
