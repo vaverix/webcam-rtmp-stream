@@ -534,16 +534,14 @@ void stream(stream_ctx_t* stream_ctx)
                     ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, &out_packet_a);
                     if (ret == 0)
                     {
-                        in_packet_a.stream_index = stream_ctx->in_stream_a->index;
                         out_packet_a.stream_index = stream_ctx->out_stream_a->index;
                         AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
-                        AVRational otime = stream_ctx->ofmt_ctx->streams[out_packet_a.stream_index]->time_base;
+                        AVRational otime = stream_ctx->ofmt_ctx->streams[in_packet_a.stream_index]->time_base;
 
                         out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                         out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                         out_packet_a.duration = av_rescale_q_rnd(in_packet_a.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                         out_packet_a.pos = -1;
-                        out_packet_a_size += out_packet_a.size;
 
                         av_interleaved_write_frame(stream_ctx->ofmt_ctx, &out_packet_a);
                         av_packet_unref(&out_packet_a);
