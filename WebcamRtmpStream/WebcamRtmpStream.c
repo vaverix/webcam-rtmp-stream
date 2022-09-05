@@ -318,7 +318,7 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
 
-    if (avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, NULL, "aac", NULL) != 0)
+    if (avformat_alloc_output_context2(&stream_ctx->ofmt_ctx_a, NULL, "adts", NULL) != 0)
     {
         fprintf(stderr, "cannot initialize audio output format context!\n");
         return 1;
