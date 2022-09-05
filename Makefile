@@ -3,7 +3,7 @@ all: build
 build: checkdir stream
 
 stream:
-	$(CC) -Iinclude -o build/stream WebcamRtmpStream/WebcamRtmpStream.c -lavdevice -lavutil -lavcodec -lavformat -lswscale
+	$(CC) -Iinclude -o build/stream WebcamRtmpStream/WebcamRtmpStream.c -lavdevice -lavutil -lavcodec -lavformat -lswscale -lavfilter
 
 static:
 	mkdir -p libs/build && cd libs/build && cmake -D CMAKE_BUILD_TYPE=Release .. && make

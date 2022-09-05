@@ -365,8 +365,8 @@ void stream(stream_ctx_t* stream_ctx)
 {
     int ret = 0;
     
-    unsigned char* src_data[AV_NUM_DATA_POINTERS];
-	unsigned char* dst_data[AV_NUM_DATA_POINTERS];
+    const unsigned char* src_data[AV_NUM_DATA_POINTERS];
+	const unsigned char* dst_data[AV_NUM_DATA_POINTERS];
 	int src_linesize[AV_NUM_DATA_POINTERS];
 	int dst_linesize[AV_NUM_DATA_POINTERS];
 
@@ -540,20 +540,19 @@ int init_audio_sample(stream_ctx_t* stream_ctx)
 	AVFilterInOut* outputs = avfilter_inout_alloc();
 	AVFilterInOut* inputs = avfilter_inout_alloc();
 
-	auto audioDecoderContext = stream_ctx->ifmt_ctx_a->streams[0]->codecpar;
+	AVCodecParameters* audioDecoderContext = stream_ctx->ifmt_ctx_a->streams[0]->codecpar;
 	if (!audioDecoderContext->channel_layout)
 		audioDecoderContext->channel_layout = av_get_default_channel_layout(audioDecoderContext->channels);
 
 	static const enum AVSampleFormat out_sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
-	static const int64_t out_channel_layouts[] = { audioDecoderContext->channel_layout, -1 };
-	static const int out_sample_rates[] = { audioDecoderContext->sample_rate , -1 };
+	static const int64_t out_channel_layouts[] = { AV_CH_LAYOUT_STEREO, -1 };
+	static const int out_sample_rates[] = { 48000, -1 };
 
 	AVRational time_base = stream_ctx->ifmt_ctx_a->streams[0]->time_base;
 	stream_ctx->filter_graph = avfilter_graph_alloc();
 	stream_ctx->filter_graph->nb_threads = 1;
 
-	sprintf_s(args, sizeof(args),
-		"time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%I64x",
+	sprintf(args, "time_base=%d/%d:sample_rate=%d:sample_fmt=%s:channel_layout=0x%lX",
 		time_base.num, time_base.den, audioDecoderContext->sample_rate,
 		av_get_sample_fmt_name(audioDecoderContext->format), audioDecoderContext->channel_layout);
 
@@ -671,7 +670,7 @@ void av_free_context(AVFormatContext* ictx, AVFormatContext* octx)
 
 	if (NULL != octx)
 	{
-		avformat_free_context(&octx);
+		avformat_free_context(octx);
 	}
 }
 
