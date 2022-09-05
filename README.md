@@ -1,9 +1,13 @@
 # webcam-rtmp-stream
 
-## Fork of [https://github.com/jkuri/ffmpeg-webcam-rtmp-stream](ffmpeg-webcam-rtmp-stream)
-
 Webcam capture streaming via RTMP or saving into video file. Cross-platform.
 Sound device support added.
+
+## Inspirations
+
+[https://github.com/jkuri/ffmpeg-webcam-rtmp-stream](ffmpeg-webcam-rtmp-stream)
+
+[https://github.com/freeeyes/ffmpeg4_camera_to_rtmp](ffmpeg4_camera_to_rtmp)
 
 ### Build (dynamic)
 
@@ -49,7 +53,15 @@ Build artifacts will be stored inside `build/` directory.
 #### Linux example
 
 ```sh
-./build/stream /dev/video0 default rtmp://localhost/live/stream flv 800 600 24
+./build/stream /dev/video0 default rtmp://localhost/live/stream flv 1920 1080 24
+```
+
+```sh
+./build/stream /dev/video0 default rtmp://live.twitch.tv/app/streamkey flv 1920 1080 24
+```
+
+```sh
+./build/stream /dev/video0 default rtmp://a.rtmp.youtube.com/live2/streamkey flv 1920 1080 24
 ```
 
 ### License
