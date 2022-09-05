@@ -53,15 +53,15 @@ Build artifacts will be stored inside `build/` directory.
 #### Linux example
 
 ```sh
-./build/stream /dev/video0 default rtmp://localhost/live/stream flv 1920 1080 24
+./build/stream /dev/video0 default rtmp://localhost/live/stream flv 1920 1080 30
 ```
 
 ```sh
-./build/stream /dev/video0 default rtmp://live.twitch.tv/app/streamkey flv 1920 1080 24
+./build/stream /dev/video0 default rtmp://live.twitch.tv/app/streamkey flv 1920 1080 30
 ```
 
 ```sh
-./build/stream /dev/video0 default rtmp://a.rtmp.youtube.com/live2/streamkey flv 1920 1080 24
+./build/stream /dev/video0 default rtmp://a.rtmp.youtube.com/live2/streamkey flv 1920 1080 30
 ```
 
 ### License
