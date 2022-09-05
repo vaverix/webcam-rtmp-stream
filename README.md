@@ -5,9 +5,9 @@ Sound device support added. Aimed mainly for Linux servers with no gpu.
 
 ## Inspirations
 
-[https://github.com/jkuri/ffmpeg-webcam-rtmp-stream](ffmpeg-webcam-rtmp-stream)
+[ffmpeg-webcam-rtmp-stream](https://github.com/jkuri/ffmpeg-webcam-rtmp-stream)
 
-[https://github.com/freeeyes/ffmpeg4_camera_to_rtmp](ffmpeg4_camera_to_rtmp)
+[ffmpeg4_camera_to_rtmp](https://github.com/freeeyes/ffmpeg4_camera_to_rtmp)
 
 ### Build (dynamic)
 
@@ -26,7 +26,7 @@ sudo apt-get install build-essential clang -y
 brew install ffmpeg
 ```
 
-#### Prerequisites (Windows, not tested) [https://vcpkg.io/en/getting-started.html](vcpkg)
+#### Prerequisites (Windows, not tested) [vcpkg](https://vcpkg.io/en/getting-started.html)
 
 ```sh
 vcpkg install ffmpeg ffmpeg:x64-windows
