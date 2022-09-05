@@ -43,7 +43,7 @@ typedef struct stream_ctx_t
 bool end_stream;
 void handle_signal(int signal);
 void clean_up(stream_ctx_t* stream_ctx);
-int init(const char* device_index, const char* adevice_index, const char* output_path, const char* output_format, int width, int height, int fps);
+int init(stream_ctx_t* stream_ctx, const char* device_index, const char* adevice_index, const char* output_path, const char* output_format, int width, int height, int fps);
 int init_video(stream_ctx_t* stream_ctx);
 int init_audio(stream_ctx_t* stream_ctx);
 void stream(stream_ctx_t* stream_ctx);

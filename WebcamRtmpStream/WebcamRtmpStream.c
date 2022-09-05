@@ -21,13 +21,17 @@ int main(int argc, char* argv[])
 
     end_stream = false;
     signal(SIGINT, handle_signal);
+    stream_ctx_t* stream_ctx = malloc(sizeof(stream_ctx_t));
 
-    if (init(device, adevice, output_path, output_format, width, height, fps))
+    if (init(stream_ctx, device, adevice, output_path, output_format, width, height, fps))
     {
         fprintf(stderr, "Error initializing, exiting now...\n");
         //clean_up(stream_ctx);
         return 1;
     }
+
+    fprintf(stdout, "Video and audio initialized, starting streaming...\n");
+    stream(stream_ctx);
 
     return 0;
 }
@@ -69,7 +73,7 @@ void clean_up(stream_ctx_t* stream_ctx)
     free(stream_ctx);
 }
 
-int init(const char* device_index, const char* adevice_index, const char* output_path, const char* output_format, int width, int height, int fps)
+int init(stream_ctx_t* stream_ctx, const char* device_index, const char* adevice_index, const char* output_path, const char* output_format, int width, int height, int fps)
 {
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 9, 100)
     av_register_all();
@@ -77,7 +81,6 @@ int init(const char* device_index, const char* adevice_index, const char* output
     avdevice_register_all();
     avformat_network_init();
 
-    stream_ctx_t* stream_ctx = malloc(sizeof(stream_ctx_t));
     stream_ctx->output_path = malloc(strlen(output_path) + 1);
     stream_ctx->output_format = malloc(strlen(output_format) + 1);
     stream_ctx->device_index = malloc(strlen(device_index) + 1);
