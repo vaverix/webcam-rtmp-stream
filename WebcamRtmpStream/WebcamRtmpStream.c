@@ -506,7 +506,6 @@ void stream(stream_ctx_t* stream_ctx)
                         }
                     }
                 }
-                av_packet_unref(&packet);
             }
         }
         
@@ -538,7 +537,7 @@ void stream(stream_ctx_t* stream_ctx)
                         //in_packet_a.stream_index = stream_ctx->in_stream_a->index;
                         //out_packet_a.stream_index = stream_ctx->out_stream_a->index;
                         AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
-                        AVRational otime = stream_ctx->ofmt_ctx->streams[out_packet_a.stream_index]->time_base;
+                        AVRational otime = stream_ctx->ofmt_ctx->streams[packet.stream_index]->time_base;
 
                         out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                         out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
@@ -551,9 +550,10 @@ void stream(stream_ctx_t* stream_ctx)
                     }
                 }
 
-                av_packet_unref(&in_packet_a);
             }
         }
+        av_packet_unref(&packet);
+        av_packet_unref(&in_packet_a);
     }
 }
 
