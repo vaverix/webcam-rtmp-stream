@@ -402,6 +402,10 @@ void stream(stream_ctx_t* stream_ctx)
         return 1;
     }
 
+    AVPacket in_packet;
+	av_init_packet(&in_packet);
+	in_packet.data = NULL;
+	in_packet.size = 0;    
     AVPacket packet;
 	av_init_packet(&packet);
 	packet.data = NULL;
@@ -421,23 +425,27 @@ void stream(stream_ctx_t* stream_ctx)
         stream_ctx->out_codec_ctx->pix_fmt,
 		16);
 	int dst_bufsize = av_image_alloc(dst_data, dst_linesize, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, AV_PIX_FMT_YUV420P, 1);
-
-	AVFrame* outFrame = av_frame_alloc();
-	unsigned char* picture_buf = (uint8_t*)av_malloc(dst_bufsize);
+    int nbytes = av_image_get_buffer_size(stream_ctx->out_codec_ctx->pix_fmt, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, 32);
+	AVFrame* frame = av_frame_alloc();
+    AVFrame* outFrame = av_frame_alloc();
+    uint8_t* picture_buf = (uint8_t *)av_malloc(nbytes);
+	//unsigned char* picture_buf = (uint8_t*)av_malloc(dst_bufsize);
 	av_image_fill_arrays(outFrame->data,
 		outFrame->linesize,
 		picture_buf,
-        stream_ctx->out_codec_ctx->pix_fmt,
+        //stream_ctx->out_codec_ctx->pix_fmt,
+        AV_PIX_FMT_YUV420P,
         stream_ctx->out_codec_ctx->width,
         stream_ctx->out_codec_ctx->height,
 		1);
-	outFrame->format = stream_ctx->out_codec_ctx->pix_fmt;
 	outFrame->width = stream_ctx->out_codec_ctx->width;
 	outFrame->height = stream_ctx->out_codec_ctx->height;
+	outFrame->format = stream_ctx->out_codec_ctx->pix_fmt;
 
 	int y_size = stream_ctx->out_codec_ctx->width * stream_ctx->out_codec_ctx->height;
 	AVPacket outpkt;
-	av_new_packet(&outpkt, dst_bufsize);
+	//av_new_packet(&outpkt, dst_bufsize);
+	av_new_packet(&outpkt, nbytes);
 
 	int loop = 0;
 	int got_picture = -1;
@@ -465,10 +473,27 @@ void stream(stream_ctx_t* stream_ctx)
     {
         //video
         {
-            if (av_read_frame(stream_ctx->ifmt_ctx, &packet) >= 0)
+            if (av_read_frame(stream_ctx->ifmt_ctx, &in_packet) >= 0)
             {
                 if (packet.stream_index == stream_ctx->stream_index) {
 
+                    frame = av_frame_alloc();
+                    if (avcodec_send_packet(stream_ctx->in_codec_ctx, &in_packet) != 0)
+                    {
+                        fprintf(stderr, "error sending packet to input codec context!\n");
+                        break;
+                    }
+
+                    if (avcodec_receive_frame(stream_ctx->in_codec_ctx, frame) != 0)
+                    {
+                        fprintf(stderr, "error receiving frame from input codec context!\n");
+                        break;
+                    }
+
+                    av_packet_unref(&in_packet);
+                    sws_scale(sws_ctx, (const uint8_t *const *)frame->data, frame->linesize, 0, stream_ctx->in_codec_ctx->height, outFrame->data, outFrame->linesize);
+                    av_frame_free(&frame);
+                    /*
                     memcpy(src_data[0], packet.data, packet.size);
                     sws_scale(sws_ctx,
                         src_data,
@@ -480,6 +505,7 @@ void stream(stream_ctx_t* stream_ctx)
                     outFrame->data[0] = dst_data[0];
                     outFrame->data[1] = dst_data[0] + y_size;
                     outFrame->data[2] = dst_data[0] + y_size * 5 / 4;
+                    */
                     outFrame->pts = loop;
                     loop++;
 
@@ -494,9 +520,12 @@ void stream(stream_ctx_t* stream_ctx)
                             AVRational itime = stream_ctx->ifmt_ctx->streams[packet.stream_index]->time_base;
                             AVRational otime = stream_ctx->ofmt_ctx->streams[packet.stream_index]->time_base;
 
-                            outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            //outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            //outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            //outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            outpkt.pts = av_rescale_q(packet.pts, itime, otime);
+                            outpkt.dts = av_rescale_q(packet.dts, itime, otime);
+                            outpkt.duration = av_rescale_q(packet.duration, itime, otime);
                             outpkt.pos = -1;
 
                             ret = av_interleaved_write_frame(stream_ctx->ofmt_ctx, &outpkt);
