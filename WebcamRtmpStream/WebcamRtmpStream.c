@@ -380,17 +380,14 @@ int init_audio(stream_ctx_t* stream_ctx)
 void stream(stream_ctx_t* stream_ctx)
 {
 
-    fprintf(stdout, "s1\n");
     int ret = 0;
     
     unsigned char* src_data[AV_NUM_DATA_POINTERS];
 	unsigned char* dst_data[AV_NUM_DATA_POINTERS];
 	int src_linesize[AV_NUM_DATA_POINTERS];
 	int dst_linesize[AV_NUM_DATA_POINTERS];
-    fprintf(stdout, "s2\n");
 
     av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
-    fprintf(stdout, "s3\n");
     ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
     if (ret != 0)
     {
@@ -398,7 +395,6 @@ void stream(stream_ctx_t* stream_ctx)
         fprintf(stderr, ret);
         return 1;
     }
-    fprintf(stdout, "s4\n");
 
     if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
     {
@@ -406,13 +402,11 @@ void stream(stream_ctx_t* stream_ctx)
         avio_close(stream_ctx->ofmt_ctx);
         return 1;
     }
-    fprintf(stdout, "s5\n");
 
     AVPacket packet;
 	av_init_packet(&packet);
 	packet.data = NULL;
 	packet.size = 0;
-    fprintf(stdout, "s6\n");
 
     struct SwsContext* sws_ctx = sws_getContext(stream_ctx->in_codec_ctx->width, 
         stream_ctx->in_codec_ctx->height, 
@@ -421,17 +415,14 @@ void stream(stream_ctx_t* stream_ctx)
         stream_ctx->out_codec_ctx->height, 
         stream_ctx->out_codec_ctx->pix_fmt, 
         SWS_BICUBIC, NULL, NULL, NULL);
-    fprintf(stdout, "s7\n");
 
 	int src_bufsize = av_image_alloc(src_data, src_linesize,
         stream_ctx->out_codec_ctx->width,
         stream_ctx->out_codec_ctx->height,
         stream_ctx->out_codec_ctx->pix_fmt,
 		16);
-    fprintf(stdout, "s8\n");
 	int dst_bufsize = av_image_alloc(dst_data, dst_linesize, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, AV_PIX_FMT_YUV420P, 1);
 
-    fprintf(stdout, "s9\n");
 	AVFrame* outFrame = av_frame_alloc();
 	unsigned char* picture_buf = (uint8_t*)av_malloc(dst_bufsize);
 	av_image_fill_arrays(outFrame->data,
@@ -441,22 +432,18 @@ void stream(stream_ctx_t* stream_ctx)
         stream_ctx->out_codec_ctx->width,
         stream_ctx->out_codec_ctx->height,
 		1);
-    fprintf(stdout, "s10\n");
 	outFrame->format = stream_ctx->out_codec_ctx->pix_fmt;
 	outFrame->width = stream_ctx->out_codec_ctx->width;
 	outFrame->height = stream_ctx->out_codec_ctx->height;
-    fprintf(stdout, "s11\n");
 
 	int y_size = stream_ctx->out_codec_ctx->width * stream_ctx->out_codec_ctx->height;
 	AVPacket outpkt;
 	av_new_packet(&outpkt, dst_bufsize);
-    fprintf(stdout, "s12\n");
 
 	int loop = 0;
 	int got_picture = -1;
 	int delayedFrame = 0;
     int samplebyte = 2;
-    fprintf(stdout, "s13\n");
 
     int loop_a = 1;
 	int delayedFrame_a = 0;
@@ -469,20 +456,19 @@ void stream(stream_ctx_t* stream_ctx)
 	av_init_packet(&out_packet_a);
 	out_packet_a.data = NULL;
 	out_packet_a.size = 0;
-    fprintf(stdout, "s14\n");
 
 	AVFrame* pSrcAudioFrame = av_frame_alloc();
 	int got_frame = 0;
 	int out_packet_a_size = 0;
-    fprintf(stdout, "s15\n");
+    fprintf(stdout, "Stream initialized, sending data to RTMP server\n");
 
     while (!end_stream)
     {
-        fprintf(stdout, "s16\n");
         //video
         {
-            if (av_read_frame(stream_ctx->ifmt_ctx, &packet))
+            if (av_read_frame(stream_ctx->ifmt_ctx, &packet) >= 0)
             {
+                fprintf(stdout, "p1\n");
                 if (packet.stream_index == stream_ctx->stream_index) {
 
                     memcpy(src_data[0], packet.data, packet.size);
@@ -516,6 +502,7 @@ void stream(stream_ctx_t* stream_ctx)
                         outpkt.pos = -1;
 
                         ret = av_interleaved_write_frame(stream_ctx->ofmt_ctx, &outpkt);
+                        fprintf(stdout, "p2\n");
                     }
                     else {
                         delayedFrame++;
@@ -527,7 +514,7 @@ void stream(stream_ctx_t* stream_ctx)
         
         // audio
         {
-            if (av_read_frame(stream_ctx->ifmt_ctx_a, &in_packet_a))
+            if (av_read_frame(stream_ctx->ifmt_ctx_a, &in_packet_a) >= 0)
             {
                 loop_a++;
                 if (0 >= in_packet_a.size)
