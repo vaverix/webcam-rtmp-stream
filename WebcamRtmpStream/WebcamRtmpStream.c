@@ -536,21 +536,9 @@ void stream(stream_ctx_t* stream_ctx)
 
                     fprintf(stdout, "a4\n");
                     ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, &out_packet_a);
-
-                    fprintf(stdout, "a5\n");
+                    //in_packet_a.stream_index = stream_ctx->in_stream_a->index;
+                    //out_packet_a.stream_index = stream_ctx->out_stream_a->index;
                     /*
-                    auto streamTimeBase = stream_ctx->ofmt_ctx->streams[out_packet.stream_index]->time_base.den;
-                    auto codecTimeBase = stream_ctx->ofmt_ctx->streams[out_packet.stream_index]->codecpar->time_base.den;
-                    out_packet.pts = out_packet.dts = (1024 * streamTimeBase * audio_count) / codecTimeBase;
-                    audio_count++;
-                    auto inputStream = stream_ctx->ifmt_ctx_a->streams[out_packet.stream_index];
-                    auto outputStream = stream_ctx->ofmt_ctx->streams[out_packet.stream_index];
-                    av_packet_rescale_ts(&out_packet, inputStream->time_base, outputStream->time_base);
-                    */
-                    fprintf(stdout, "a6\n");
-
-                    in_packet_a.stream_index = stream_ctx->in_stream_a->index;
-                    out_packet_a.stream_index = stream_ctx->out_stream_a->index;
                     fprintf(stdout, "a6a\n");
                     AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
                     fprintf(stdout, "a6b\n");
@@ -562,7 +550,7 @@ void stream(stream_ctx_t* stream_ctx)
                     out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                     out_packet_a.duration = av_rescale_q_rnd(in_packet_a.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                     out_packet_a.pos = -1;
-
+                    */
                     out_packet_a_size += out_packet_a.size;
                     fprintf(stdout, "a8\n");
 
