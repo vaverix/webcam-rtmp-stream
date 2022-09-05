@@ -5,9 +5,9 @@ Sound device support added. Aimed mainly for Linux servers with no gpu.
 
 ## Inspirations
 
-[ffmpeg-webcam-rtmp-stream](https://github.com/jkuri/ffmpeg-webcam-rtmp-stream)
+[jkuri/ffmpeg-webcam-rtmp-stream](https://github.com/jkuri/ffmpeg-webcam-rtmp-stream)
 
-[ffmpeg4_camera_to_rtmp](https://github.com/freeeyes/ffmpeg4_camera_to_rtmp)
+[freeeyes/ffmpeg4_camera_to_rtmp](https://github.com/freeeyes/ffmpeg4_camera_to_rtmp)
 
 ### Build (dynamic)
 
