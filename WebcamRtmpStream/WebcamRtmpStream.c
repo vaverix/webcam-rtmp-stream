@@ -32,6 +32,7 @@ int main(int argc, char* argv[])
 
     fprintf(stdout, "Video and audio initialized, starting streaming...\n");
     stream(stream_ctx);
+    clean_up(stream_ctx);
 
     return 0;
 }
@@ -40,7 +41,6 @@ void handle_signal(int signal)
 {
     fprintf(stderr, "Caught SIGINT, exiting now...\n");
     end_stream = true;
-    //clean_up(stream_ctx);
 }
 
 void clean_up(stream_ctx_t* stream_ctx)
@@ -358,7 +358,7 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
 
-    if (init_audio_sample(stream_ctx))
+    if (init_audio_sample(stream_ctx) != 0)
     {
         fprintf(stderr, "cannot init audio sample!\n");
         return 1;
@@ -367,22 +367,21 @@ int init_audio(stream_ctx_t* stream_ctx)
     ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
     if (ret != 0)
     {
-        fprintf(stderr, "could not open audio RTMP context! error code: ");
-        fprintf(stderr, ret);
+        fprintf(stderr, "could not open audio RTMP context! error code: %d", ret);
         return 1;
     }
 
     if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
     {
         fprintf(stderr, "could not write header to audio output context!\n");
-        avio_close(stream_ctx->ofmt_ctx);
+        avio_close(stream_ctx->ofmt_ctx->pb);
         return 1;
     }
     */
     return 0;
 }
 
-void stream(stream_ctx_t* stream_ctx)
+int stream(stream_ctx_t* stream_ctx)
 {
 
     int ret = 0;
@@ -391,27 +390,20 @@ void stream(stream_ctx_t* stream_ctx)
     ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
     if (ret != 0)
     {
-        fprintf(stderr, "could not open RTMP context! error code: ");
-        fprintf(stderr, ret);
+        fprintf(stderr, "could not open RTMP context! error code: %d", ret);
         return 1;
     }
 
     if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
     {
         fprintf(stderr, "could not write header to audio/video ouput context!\n");
-        avio_close(stream_ctx->ofmt_ctx);
+        avio_close(stream_ctx->ofmt_ctx->pb);
         return 1;
     }
 
     /* Video variables */
-    AVPacket in_packet;
-	av_init_packet(&in_packet);
-	in_packet.data = NULL;
-	in_packet.size = 0;    
-    AVPacket packet;
-	av_init_packet(&packet);
-	packet.data = NULL;
-	packet.size = 0;
+    AVPacket* in_packet = av_packet_alloc();
+    AVPacket* packet = av_packet_alloc();
 
     struct SwsContext* sws_ctx = sws_getContext(stream_ctx->in_codec_ctx->width, 
         stream_ctx->in_codec_ctx->height, 
@@ -450,14 +442,8 @@ void stream(stream_ctx_t* stream_ctx)
 	int delayedFrame_a = 0;
     int samplebyte = 2;
 	int audio_count = 0;
-	AVPacket in_packet_a;
-	av_init_packet(&in_packet_a);
-	in_packet_a.data = NULL;
-	in_packet_a.size = 0;
-	AVPacket out_packet_a;
-	av_init_packet(&out_packet_a);
-	out_packet_a.data = NULL;
-	out_packet_a.size = 0;
+	AVPacket* in_packet_a = av_packet_alloc();
+	AVPacket* out_packet_a = av_packet_alloc();
 
 	AVFrame* pSrcAudioFrame = av_frame_alloc();
 	int out_packet_a_size = 0;
@@ -467,13 +453,13 @@ void stream(stream_ctx_t* stream_ctx)
     {
         //video
         {
-	        av_new_packet(&in_packet, 0);
-            if (av_read_frame(stream_ctx->ifmt_ctx, &in_packet) >= 0)
+	        av_new_packet(in_packet, 0);
+            if (av_read_frame(stream_ctx->ifmt_ctx, in_packet) >= 0)
             {
-                if (packet.stream_index == stream_ctx->stream_index) {
+                if (packet->stream_index == stream_ctx->stream_index) {
 
                     frame = av_frame_alloc();
-                    if (avcodec_send_packet(stream_ctx->in_codec_ctx, &in_packet) != 0)
+                    if (avcodec_send_packet(stream_ctx->in_codec_ctx, in_packet) != 0)
                     {
                         fprintf(stderr, "error sending packet to input codec context!\n");
                         av_frame_free(&frame);
@@ -487,7 +473,7 @@ void stream(stream_ctx_t* stream_ctx)
                         break;
                     }
 
-                    av_packet_unref(&in_packet);
+                    av_packet_free(&in_packet);
                     sws_scale(sws_ctx, (const uint8_t *const *)frame->data, frame->linesize, 0, stream_ctx->in_codec_ctx->height, outFrame->data, outFrame->linesize);
                     av_frame_free(&frame);
                     outFrame->pts = loop;
@@ -527,16 +513,16 @@ void stream(stream_ctx_t* stream_ctx)
         }
         // audio
         {
-	        av_new_packet(&in_packet_a, 0);
-            if (av_read_frame(stream_ctx->ifmt_ctx_a, &in_packet_a) >= 0)
+	        av_new_packet(in_packet_a, 0);
+            if (av_read_frame(stream_ctx->ifmt_ctx_a, in_packet_a) >= 0)
             {
                 loop_a++;
-                if (0 >= in_packet_a.size)
+                if (0 >= in_packet_a->size)
                 {
                     continue;
                 }
 
-                AVFrame* filter_frame = decode_audio(&in_packet_a, pSrcAudioFrame, stream_ctx->in_codec_ctx_a, stream_ctx->buffer_sink_ctx, stream_ctx->buffer_src_ctx);
+                AVFrame* filter_frame = decode_audio(in_packet_a, pSrcAudioFrame, stream_ctx->in_codec_ctx_a, stream_ctx->buffer_sink_ctx, stream_ctx->buffer_src_ctx);
 
                 if (filter_frame != NULL)
                 {
@@ -548,27 +534,31 @@ void stream(stream_ctx_t* stream_ctx)
                         break;
                     }
 
-                    ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, &out_packet_a);
+                    ret = avcodec_receive_packet(stream_ctx->out_codec_ctx_a, out_packet_a);
                     if (ret == 0)
                     {
-                        out_packet_a.stream_index = stream_ctx->out_stream_a->index;
+                        out_packet_a->stream_index = stream_ctx->out_stream_a->index;
+                        /*
                         AVRational itime = stream_ctx->ifmt_ctx_a->streams[in_packet_a.stream_index]->time_base;
                         AVRational otime = stream_ctx->ofmt_ctx->streams[in_packet_a.stream_index]->time_base;
 
                         out_packet_a.pts = av_rescale_q_rnd(in_packet_a.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                         out_packet_a.dts = av_rescale_q_rnd(in_packet_a.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
                         out_packet_a.duration = av_rescale_q_rnd(in_packet_a.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                        out_packet_a.pos = -1;
+                        */
+                        out_packet_a->pts = av_rescale_q(out_packet_a->pts, stream_ctx->out_codec_ctx_a->time_base, stream_ctx->out_stream_a->time_base);
+                        out_packet_a->dts = av_rescale_q(out_packet_a->dts, stream_ctx->out_codec_ctx_a->time_base, stream_ctx->out_stream_a->time_base);
+                        out_packet_a->pos = -1;
 
-                        av_interleaved_write_frame(stream_ctx->ofmt_ctx, &out_packet_a);
-                        av_packet_unref(&out_packet_a);
+                        av_interleaved_write_frame(stream_ctx->ofmt_ctx, out_packet_a);
+                        av_packet_free(&out_packet_a);
                     }
                 }
 
             }
         }
-        av_packet_unref(&packet);
-        av_packet_unref(&in_packet_a);
+        av_packet_free(&packet);
+        av_packet_free(&in_packet_a);
     }
 }
 
@@ -626,7 +616,7 @@ int init_audio_sample(stream_ctx_t* stream_ctx)
 	AVFilterInOut* outputs = avfilter_inout_alloc();
 	AVFilterInOut* inputs = avfilter_inout_alloc();
 
-	AVCodecParameters* audioDecoderContext = stream_ctx->ifmt_ctx_a->streams[0]->codecpar;
+	AVCodecParameters* audioDecoderContext = stream_ctx->ifmt_ctx_a->streams[stream_ctx->audio_stream_index]->codecpar;
 	if (!audioDecoderContext->channel_layout)
 		audioDecoderContext->channel_layout = av_get_default_channel_layout(audioDecoderContext->channels);
 
@@ -634,7 +624,7 @@ int init_audio_sample(stream_ctx_t* stream_ctx)
 	static const int64_t out_channel_layouts[] = { AV_CH_LAYOUT_STEREO, -1 };
 	static const int out_sample_rates[] = { 48000, -1 };
 
-	AVRational time_base = stream_ctx->ifmt_ctx_a->streams[0]->time_base;
+	AVRational time_base = stream_ctx->ifmt_ctx_a->streams[stream_ctx->audio_stream_index]->time_base;
 	stream_ctx->filter_graph = avfilter_graph_alloc();
 	stream_ctx->filter_graph->nb_threads = 1;
 
