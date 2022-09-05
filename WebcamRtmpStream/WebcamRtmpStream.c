@@ -159,6 +159,27 @@ int init_video(stream_ctx_t* stream_ctx)
     }
     stream_ctx->stream_index = stream_index;
 
+    stream_ctx->in_codec = avcodec_find_decoder(stream_ctx->ifmt_ctx->streams[stream_index]->codecpar->codec_id);
+    if (!stream_ctx->in_codec)
+    {
+        fprintf(stderr, "cannot find video decoder!\n");
+        return 1;
+    }
+
+    stream_ctx->in_codec_ctx = avcodec_alloc_context3(stream_ctx->in_codec);
+    if (!stream_ctx->in_codec_ctx)
+    {
+        fprintf(stderr, "cannot allocate video decoder context!\n");
+        return 1;
+    }
+
+    avcodec_parameters_to_context(stream_ctx->in_codec_ctx, stream_ctx->ifmt_ctx->streams[stream_index]->codecpar);
+    if (avcodec_open2(stream_ctx->in_codec_ctx, stream_ctx->in_codec, NULL) != 0)
+    {
+        fprintf(stderr, "cannot initialize video decoder!\n");
+        return 1;
+    }
+
     stream_ctx->out_codec = avcodec_find_encoder(AV_CODEC_ID_H264);
     if (!stream_ctx->out_codec)
     {
