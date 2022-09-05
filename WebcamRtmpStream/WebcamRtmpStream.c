@@ -193,16 +193,19 @@ int init_video(stream_ctx_t* stream_ctx)
         fprintf(stderr, "cannot allocate video encoder context!\n");
         return 1;
     }
-	stream_ctx->out_codec_ctx->codec_id = stream_ctx->out_codec->id;
-	stream_ctx->out_codec_ctx->bit_rate = 400000;
+
+    const int out_fps = stream_ctx->fps;
+    const AVRational dst_fps = {out_fps, 1};
+    stream_ctx->out_codec_ctx->codec_tag = 0;
+    stream_ctx->out_codec_ctx->codec_id = AV_CODEC_ID_H264;
+    stream_ctx->out_codec_ctx->codec_type = AVMEDIA_TYPE_VIDEO;
+	//stream_ctx->out_codec_ctx->bit_rate = 400000;
 	stream_ctx->out_codec_ctx->width = stream_ctx->ifmt_ctx->streams[stream_index]->codecpar->width;
 	stream_ctx->out_codec_ctx->height = stream_ctx->ifmt_ctx->streams[stream_index]->codecpar->height;
-	stream_ctx->out_codec_ctx->time_base.num = 1;
-	stream_ctx->out_codec_ctx->time_base.den = 30;
-	stream_ctx->out_codec_ctx->framerate.num = 30;
-	stream_ctx->out_codec_ctx->framerate.den = 1;
-	stream_ctx->out_codec_ctx->gop_size = 10;
-	stream_ctx->out_codec_ctx->max_b_frames = 0;
+    stream_ctx->out_codec_ctx->framerate = dst_fps;
+    stream_ctx->out_codec_ctx->time_base = av_inv_q(dst_fps);
+	stream_ctx->out_codec_ctx->gop_size = 12;
+	//stream_ctx->out_codec_ctx->max_b_frames = 0;
 	stream_ctx->out_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
 	stream_ctx->out_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
@@ -240,6 +243,9 @@ int init_video(stream_ctx_t* stream_ctx)
         fprintf(stderr, "cannot get output video parameters!\n");
         return 1;
     }
+
+    stream_ctx->out_stream->codecpar->extradata = stream_ctx->out_codec_ctx->extradata;
+    stream_ctx->out_stream->codecpar->extradata_size = stream_ctx->out_codec_ctx->extradata_size;
 
     return 0;
 }
@@ -380,13 +386,8 @@ void stream(stream_ctx_t* stream_ctx)
 {
 
     int ret = 0;
-    
-    unsigned char* src_data[AV_NUM_DATA_POINTERS];
-	unsigned char* dst_data[AV_NUM_DATA_POINTERS];
-	int src_linesize[AV_NUM_DATA_POINTERS];
-	int dst_linesize[AV_NUM_DATA_POINTERS];
 
-    av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
+    //av_stream_set_r_frame_rate(stream_ctx->out_stream, av_make_q(1, stream_ctx->fps));
     ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
     if (ret != 0)
     {
@@ -402,6 +403,7 @@ void stream(stream_ctx_t* stream_ctx)
         return 1;
     }
 
+    /* Video variables */
     AVPacket in_packet;
 	av_init_packet(&in_packet);
 	in_packet.data = NULL;
@@ -419,13 +421,7 @@ void stream(stream_ctx_t* stream_ctx)
         stream_ctx->out_codec_ctx->pix_fmt, 
         SWS_BICUBIC, NULL, NULL, NULL);
 
-	int src_bufsize = av_image_alloc(src_data, src_linesize,
-        stream_ctx->out_codec_ctx->width,
-        stream_ctx->out_codec_ctx->height,
-        stream_ctx->out_codec_ctx->pix_fmt,
-		16);
-	int dst_bufsize = av_image_alloc(dst_data, dst_linesize, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, AV_PIX_FMT_YUV420P, 1);
-    int nbytes = av_image_get_buffer_size(stream_ctx->out_codec_ctx->pix_fmt, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, 32);
+	int nbytes = av_image_get_buffer_size(stream_ctx->out_codec_ctx->pix_fmt, stream_ctx->out_codec_ctx->width, stream_ctx->out_codec_ctx->height, 32);
 	AVFrame* frame = av_frame_alloc();
     AVFrame* outFrame = av_frame_alloc();
     uint8_t* picture_buf = (uint8_t *)av_malloc(nbytes);
@@ -433,8 +429,7 @@ void stream(stream_ctx_t* stream_ctx)
 	av_image_fill_arrays(outFrame->data,
 		outFrame->linesize,
 		picture_buf,
-        //stream_ctx->out_codec_ctx->pix_fmt,
-        AV_PIX_FMT_YUV420P,
+        stream_ctx->out_codec_ctx->pix_fmt,
         stream_ctx->out_codec_ctx->width,
         stream_ctx->out_codec_ctx->height,
 		1);
@@ -442,18 +437,18 @@ void stream(stream_ctx_t* stream_ctx)
 	outFrame->height = stream_ctx->out_codec_ctx->height;
 	outFrame->format = stream_ctx->out_codec_ctx->pix_fmt;
 
-	int y_size = stream_ctx->out_codec_ctx->width * stream_ctx->out_codec_ctx->height;
 	AVPacket outpkt;
-	//av_new_packet(&outpkt, dst_bufsize);
 	av_new_packet(&outpkt, nbytes);
 
 	int loop = 0;
 	int got_picture = -1;
 	int delayedFrame = 0;
-    int samplebyte = 2;
+	int got_frame = 0;
 
+    /* Audio variables */
     int loop_a = 1;
 	int delayedFrame_a = 0;
+    int samplebyte = 2;
 	int audio_count = 0;
 	AVPacket in_packet_a;
 	av_init_packet(&in_packet_a);
@@ -465,7 +460,6 @@ void stream(stream_ctx_t* stream_ctx)
 	out_packet_a.size = 0;
 
 	AVFrame* pSrcAudioFrame = av_frame_alloc();
-	int got_frame = 0;
 	int out_packet_a_size = 0;
     fprintf(stdout, "Stream initialized, sending data to RTMP server\n");
 
@@ -473,6 +467,7 @@ void stream(stream_ctx_t* stream_ctx)
     {
         //video
         {
+	        av_new_packet(&in_packet, 0);
             if (av_read_frame(stream_ctx->ifmt_ctx, &in_packet) >= 0)
             {
                 if (packet.stream_index == stream_ctx->stream_index) {
@@ -481,31 +476,20 @@ void stream(stream_ctx_t* stream_ctx)
                     if (avcodec_send_packet(stream_ctx->in_codec_ctx, &in_packet) != 0)
                     {
                         fprintf(stderr, "error sending packet to input codec context!\n");
+                        av_frame_free(&frame);
                         break;
                     }
 
                     if (avcodec_receive_frame(stream_ctx->in_codec_ctx, frame) != 0)
                     {
                         fprintf(stderr, "error receiving frame from input codec context!\n");
+                        av_frame_free(&frame);
                         break;
                     }
 
                     av_packet_unref(&in_packet);
                     sws_scale(sws_ctx, (const uint8_t *const *)frame->data, frame->linesize, 0, stream_ctx->in_codec_ctx->height, outFrame->data, outFrame->linesize);
                     av_frame_free(&frame);
-                    /*
-                    memcpy(src_data[0], packet.data, packet.size);
-                    sws_scale(sws_ctx,
-                        src_data,
-                        src_linesize,
-                        0,
-                        stream_ctx->ifmt_ctx->streams[stream_ctx->stream_index]->codecpar->height,
-                        dst_data,
-                        dst_linesize);
-                    outFrame->data[0] = dst_data[0];
-                    outFrame->data[1] = dst_data[0] + y_size;
-                    outFrame->data[2] = dst_data[0] + y_size * 5 / 4;
-                    */
                     outFrame->pts = loop;
                     loop++;
 
@@ -517,15 +501,19 @@ void stream(stream_ctx_t* stream_ctx)
                         if (0 == ret)
                         {
                             outpkt.stream_index = stream_ctx->out_stream->index;
+                            /*
                             AVRational itime = stream_ctx->ifmt_ctx->streams[packet.stream_index]->time_base;
                             AVRational otime = stream_ctx->ofmt_ctx->streams[packet.stream_index]->time_base;
 
-                            //outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            //outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            //outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
-                            outpkt.pts = av_rescale_q(packet.pts, itime, otime);
-                            outpkt.dts = av_rescale_q(packet.dts, itime, otime);
-                            outpkt.duration = av_rescale_q(packet.duration, itime, otime);
+                            outpkt.pts = av_rescale_q_rnd(packet.pts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            outpkt.dts = av_rescale_q_rnd(packet.dts, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            outpkt.duration = av_rescale_q_rnd(packet.duration, itime, otime, (AV_ROUND_NEAR_INF | AV_ROUND_PASS_MINMAX));
+                            //outpkt.pts = av_rescale_q(packet.pts, itime, otime);
+                            //outpkt.dts = av_rescale_q(packet.dts, itime, otime);
+                            //outpkt.duration = av_rescale_q(packet.duration, itime, otime);
+                            */
+                            outpkt.pts = av_rescale_q(outpkt.pts, stream_ctx->out_codec_ctx->time_base, stream_ctx->out_stream->time_base);
+                            outpkt.dts = av_rescale_q(outpkt.dts, stream_ctx->out_codec_ctx->time_base, stream_ctx->out_stream->time_base);
                             outpkt.pos = -1;
 
                             ret = av_interleaved_write_frame(stream_ctx->ofmt_ctx, &outpkt);
@@ -537,9 +525,9 @@ void stream(stream_ctx_t* stream_ctx)
                 }
             }
         }
-        
         // audio
         {
+	        av_new_packet(&in_packet_a, 0);
             if (av_read_frame(stream_ctx->ifmt_ctx_a, &in_packet_a) >= 0)
             {
                 loop_a++;
