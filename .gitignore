@@ -55,6 +55,7 @@ WebcamRtmpStream/x86_64
 
 # User settings
 *.vcxproj.user
+stream.sh
 
 # Kernel Module Compile Results
 *.mod*

@@ -204,8 +204,8 @@ int init_video(stream_ctx_t* stream_ctx)
 	stream_ctx->out_codec_ctx->height = stream_ctx->ifmt_ctx->streams[stream_index]->codecpar->height;
     stream_ctx->out_codec_ctx->framerate = dst_fps;
     stream_ctx->out_codec_ctx->time_base = av_inv_q(dst_fps);
-	stream_ctx->out_codec_ctx->gop_size = 12;
-	//stream_ctx->out_codec_ctx->max_b_frames = 0;
+	stream_ctx->out_codec_ctx->gop_size = 10;
+	stream_ctx->out_codec_ctx->max_b_frames = 0;
 	stream_ctx->out_codec_ctx->pix_fmt = AV_PIX_FMT_YUV420P;
 	stream_ctx->out_codec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
@@ -323,10 +323,12 @@ int init_audio(stream_ctx_t* stream_ctx)
         return 1;
     }
 	stream_ctx->out_codec_ctx_a->codec = stream_ctx->out_codec_a;
-	stream_ctx->out_codec_ctx_a->sample_rate = 48000;
-	stream_ctx->out_codec_ctx_a->channel_layout = 3;
+	stream_ctx->out_codec_ctx_a->sample_rate = 44100;
+	stream_ctx->out_codec_ctx_a->channel_layout = AV_CH_LAYOUT_STEREO;
+	stream_ctx->out_codec_ctx_a->bit_rate = 160000;
 	stream_ctx->out_codec_ctx_a->channels = 2;
 	stream_ctx->out_codec_ctx_a->sample_fmt = AV_SAMPLE_FMT_FLTP;
+    //stream_ctx->out_codec_ctx_a->profile = FF_PROFILE_AAC_HE;
 	stream_ctx->out_codec_ctx_a->codec_tag = 0;
 	stream_ctx->out_codec_ctx_a->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
@@ -363,21 +365,10 @@ int init_audio(stream_ctx_t* stream_ctx)
         fprintf(stderr, "cannot init audio sample!\n");
         return 1;
     }
-    /*
-    ret = avio_open2(&stream_ctx->ofmt_ctx->pb, stream_ctx->output_path, AVIO_FLAG_WRITE, NULL, NULL);
-    if (ret != 0)
-    {
-        fprintf(stderr, "could not open audio RTMP context! error code: %d", ret);
-        return 1;
-    }
 
-    if (avformat_write_header(stream_ctx->ofmt_ctx, NULL) != 0)
-    {
-        fprintf(stderr, "could not write header to audio output context!\n");
-        avio_close(stream_ctx->ofmt_ctx->pb);
-        return 1;
-    }
-    */
+    stream_ctx->out_stream_a->codecpar->extradata = stream_ctx->out_codec_ctx_a->extradata;
+    stream_ctx->out_stream_a->codecpar->extradata_size = stream_ctx->out_codec_ctx_a->extradata_size;
+
     return 0;
 }
 
@@ -605,7 +596,7 @@ int init_audio_sample(stream_ctx_t* stream_ctx)
 
 	static const enum AVSampleFormat out_sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
 	static const int64_t out_channel_layouts[] = { AV_CH_LAYOUT_STEREO, -1 };
-	static const int out_sample_rates[] = { 48000, -1 };
+	static const int out_sample_rates[] = { 44100, -1 };
 
 	AVRational time_base = stream_ctx->ifmt_ctx_a->streams[stream_ctx->audio_stream_index]->time_base;
 	stream_ctx->filter_graph = avfilter_graph_alloc();
